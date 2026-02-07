@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.36.9",
+    "@clerk/themes": "^2.4.51",
     "@supabase/supabase-js": "^2.91.1",
     "date-fns": "^4.1.0",
     "fit-file-parser": "^2.3.1",
