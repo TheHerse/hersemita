@@ -1,12 +1,26 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
+const isPublicRoute = createRouteMatcher([
+  '/',
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/runner/login',
+  '/runner/upload',
+])
+
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)', 
   '/runners(.*)'
 ])
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) await auth.protect()
+  // If it's a protected route, require auth
+  if (isProtectedRoute(req)) {
+    await auth.protect()
+  }
+  
+  // Public routes are accessible to everyone
+  // Clerk will handle redirects based on your env vars
 })
 
 export const config = {

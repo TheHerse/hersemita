@@ -15,18 +15,67 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
 }
 
 /* Fix greyed-out text - make it visible */
 .text-muted {
-  color: #94a3b8; /* slate-400 - visible but subdued */
+  color: #94a3b8 !important; /* slate-400 */
 }
 
 .text-secondary {
-  color: #cbd5e1; /* slate-300 - clearly visible */
+  color: #cbd5e1 !important; /* slate-300 */
 }
 
-/* Ensure all text is readable */
-p, span, div, h1, h2, h3, h4, h5, h6 {
-  color: inherit;
+/* Ensure all text is readable - but don't override everything */
+p, span, h1, h2, h3, h4, h5, h6, label, button {
+  color: #f8fafc;
+}
+
+/* Fix divs that might have white backgrounds */
+div {
+  background-color: transparent;
+}
+
+/* Specific component fixes */
+.bg-white, 
+[class*="bg-white"] {
+  background-color: #1e293b !important; /* slate-800 */
+  color: #f8fafc !important;
+}
+
+/* Fix cards and containers */
+[class*="bg-gray-"],
+[class*="bg-slate-"] {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+/* Fix any text-gray classes */
+[class*="text-gray-"],
+[class*="text-slate-"] {
+  color: #cbd5e1 !important;
+}
+
+/* Tables */
+table, tr, td, th {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+/* Input fields */
+input, select, textarea {
+  background-color: #334155 !important; /* slate-700 */
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+/* Links */
+a {
+  color: #60a5fa !important; /* blue-400 */
+}
+
+a:hover {
+  color: #93c5fd !important; /* blue-300 */
 }
