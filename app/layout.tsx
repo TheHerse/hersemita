@@ -21,12 +21,17 @@ export default function RootLayout({
       appearance={{
         baseTheme: dark,
         variables: {
-          colorPrimary: '#3b82f6', // blue-500
-          colorBackground: '#0f172a', // slate-900
-          colorText: '#f8fafc', // slate-50
-          colorTextSecondary: '#cbd5e1', // slate-300
+          colorPrimary: '#3b82f6',
+          colorBackground: '#0f172a',
+          colorText: '#f8fafc',
+          colorTextSecondary: '#cbd5e1',
         },
       }}
+      // ADD THESE 4 LINES:
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      afterSignInUrl="/dashboard"
+      afterSignUpUrl="/dashboard"
     >
       <html lang="en" className="dark">
         <body className={`${inter.className} bg-slate-900 text-slate-50 antialiased`}>

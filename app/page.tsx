@@ -1,4 +1,4 @@
-import { SignInButton } from "@clerk/nextjs";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -10,11 +10,11 @@ export default function Home() {
           Verify long runs, monitor progress, and communicate with parents—all in one place.
         </p>
         <div className="flex gap-4 justify-center pt-4">
-          <SignInButton mode="modal">
+          <Link href="/sign-in">
             <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg text-lg transition-colors">
               Coach Login
             </button>
-          </SignInButton>
+          </Link>
         </div>
       </div>
     </main>
