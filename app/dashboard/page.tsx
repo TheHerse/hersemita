@@ -1,4 +1,3 @@
-// app/dashboard/page.tsx
 import { auth } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
@@ -76,7 +75,6 @@ async function updateActivity(formData: FormData) {
   const paceMinutes = parseInt(formData.get("paceMinutes") as string) || 0;
   const paceSeconds = parseInt(formData.get("paceSeconds") as string) || 0;
   
-  // Convert minutes:seconds to total seconds
   const pace = (paceMinutes * 60) + paceSeconds;
   
   const { error } = await supabase
@@ -247,40 +245,83 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b px-8 py-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-slate-900">Hersemita</h1>
-        <div className="flex gap-4 items-center">
-          <Link href="/runners" className="text-blue-600 hover:underline">Runners</Link>
-          <Link href="/runners/message" className="text-blue-600 hover:underline">Message Parents</Link>
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-2xl overflow-hidden">
+            <img 
+              src="/logo.png" 
+              alt="Hersemita" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
+            Hersemita
+          </h1>
+        </div>
+        <div className="flex gap-6 items-center">
+          <Link href="/runners" className="text-slate-600 hover:text-[#00a7ff] transition-colors font-medium">
+            Runners
+          </Link>
+          <Link href="/runners/message" className="text-slate-600 hover:text-[#00a7ff] transition-colors font-medium">
+            Message Parents
+          </Link>
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
 
-      <main className="p-8">
+      <main className="p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold text-slate-900">Coach Dashboard</h2>
-            <Link href="/runners/new" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-semibold">
-              + Add Runner
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-900">Coach Dashboard</h2>
+              <p className="text-slate-500 mt-1">Track, verify, and analyze your team's performance</p>
+            </div>
+            <Link 
+              href="/runners/new" 
+              className="bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white px-6 py-3 rounded-lg hover:shadow-lg hover:shadow-[#00a7ff]/20 transition-all font-semibold flex items-center gap-2"
+            >
+              <span>+</span>
+              <span>Add Runner</span>
             </Link>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Link href="/runners" className="bg-white p-6 rounded-lg shadow-sm border hover:shadow-md transition-shadow">
-              <h3 className="text-lg font-semibold mb-2 text-slate-700">Runners</h3>
-              <p className="text-3xl font-bold text-blue-600">{runnerCount}</p>
+            <Link href="/runners" className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-[#00a7ff]/30 transition-all group">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-[#00a7ff]/10 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-[#00a7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700 group-hover:text-[#00a7ff] transition-colors">Runners</h3>
+              </div>
+              <p className="text-4xl font-bold text-[#00a7ff]">{runnerCount}</p>
               <p className="text-sm text-slate-500 mt-1">Total athletes</p>
             </Link>
             
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <h3 className="text-lg font-semibold mb-2 text-slate-700">Activities</h3>
-              <p className="text-3xl font-bold text-green-600">{activityCount}</p>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-[#00ff67]/10 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700">Activities</h3>
+              </div>
+              <p className="text-4xl font-bold text-[#00ff67]">{activityCount}</p>
               <p className="text-sm text-slate-500 mt-1">All time</p>
             </div>
             
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <h3 className="text-lg font-semibold mb-2 text-slate-700">Pending</h3>
-              <p className="text-3xl font-bold text-orange-600">{pendingCount}</p>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-700">Pending</h3>
+              </div>
+              <p className="text-4xl font-bold text-orange-500">{pendingCount}</p>
               <p className="text-sm text-slate-500 mt-1">Unverified runs</p>
             </div>
           </div>
@@ -294,8 +335,15 @@ export default async function DashboardPage() {
             <RunnerTrendChart activities={recentActivities} />
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border mb-8">
-            <h3 className="text-xl font-semibold mb-4">Activity Management</h3>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00ff67] to-[#00a7ff] flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-slate-900">Activity Management</h3>
+            </div>
             <div className="space-y-4">
               {activities?.map((activity) => {
                 const paceMinutes = Math.floor(activity.pace_per_mile / 60);
@@ -304,17 +352,19 @@ export default async function DashboardPage() {
                 const runner = activity.runners;
                 
                 return (
-                  <div key={activity.id} className="border rounded-lg p-4">
+                  <div key={activity.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <div className="font-medium text-lg">{runner.first_name} {runner.last_name}</div>
+                        <div className="font-medium text-lg text-slate-900">{runner.first_name} {runner.last_name}</div>
                         <div className="text-sm text-slate-600">
                           {new Date(activity.start_time).toLocaleDateString()} • {activity.file_type?.toUpperCase() || 'GPX'}
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          activity.verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                          activity.verified 
+                            ? 'bg-[#00ff67]/10 text-[#00ff67]' 
+                            : 'bg-orange-100 text-orange-600'
                         }`}>
                           {activity.verified ? 'Verified' : 'Pending'}
                         </span>
@@ -325,35 +375,35 @@ export default async function DashboardPage() {
                       <input type="hidden" name="activityId" value={activity.id} />
                       
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Distance (miles)</label>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Distance (miles)</label>
                         <input 
                           type="number" 
                           name="distance" 
                           defaultValue={activity.distance_miles?.toFixed(2)}
                           step="0.01"
-                          className="border rounded px-2 py-1 w-full text-sm"
+                          className="border border-slate-300 rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Pace (min:sec/mi)</label>
-                        <div className="flex gap-1">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Pace (min:sec/mi)</label>
+                        <div className="flex gap-2">
                           <input 
                             type="number" 
                             name="paceMinutes" 
                             defaultValue={paceMinutes}
                             min="0"
-                            className="border rounded px-2 py-1 w-full text-sm"
+                            className="border border-slate-300 rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
                             placeholder="min"
                           />
-                          <span className="self-center">:</span>
+                          <span className="self-center text-slate-400">:</span>
                           <input 
                             type="number" 
                             name="paceSeconds" 
                             defaultValue={paceSeconds}
                             min="0"
                             max="59"
-                            className="border rounded px-2 py-1 w-full text-sm"
+                            className="border border-slate-300 rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
                             placeholder="sec"
                           />
                         </div>
@@ -362,23 +412,23 @@ export default async function DashboardPage() {
                       <div>
                         <button 
                           type="submit" 
-                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 w-full"
+                          className="bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg hover:shadow-[#00a7ff]/20 transition-all w-full"
                         >
                           Update
                         </button>
                       </div>
                       
-                      <div className="text-right text-sm text-gray-600">
+                      <div className="text-right text-sm text-slate-500 font-medium">
                         Current: {activity.distance_miles?.toFixed(2)} mi • {paceDisplay}/mi
                       </div>
                     </form>
                     
-                    <div className="flex justify-end gap-2 pt-2 border-t">
+                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                       {!activity.verified && (
                         <form action={verifyActivity.bind(null, activity.id)} className="inline">
                           <button 
                             type="submit" 
-                            className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                            className="bg-[#00ff67] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#00e55c] transition-colors"
                           >
                             Verify
                           </button>
@@ -392,15 +442,34 @@ export default async function DashboardPage() {
                 );
               })}
               {activities?.length === 0 && (
-                <p className="text-slate-500">No activities yet. Upload runs to start tracking.</p>
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <p className="text-slate-500">No activities yet. Upload runs to start tracking.</p>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-xl font-semibold mb-4">Quick Verify</h3>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-lg bg-[#00ff67]/10 flex items-center justify-center">
+                <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-slate-900">Quick Verify</h3>
+            </div>
             {activities?.filter(a => !a.verified).length === 0 ? (
-              <p className="text-green-600">All activities verified! 🎉</p>
+              <div className="flex items-center gap-3 text-[#00ff67] bg-[#00ff67]/5 p-4 rounded-lg">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="font-semibold">All activities verified! 🎉</span>
+              </div>
             ) : (
               <div className="space-y-3">
                 {activities?.filter(a => !a.verified).slice(0, 5).map((activity) => {
@@ -410,9 +479,9 @@ export default async function DashboardPage() {
                   const runner = activity.runners;
                   
                   return (
-                    <div key={activity.id} className="flex justify-between items-center py-3 border-b">
+                    <div key={activity.id} className="flex justify-between items-center py-3 border-b border-slate-100 last:border-0">
                       <div className="flex-1">
-                        <div className="font-medium">{runner.first_name} {runner.last_name}</div>
+                        <div className="font-medium text-slate-900">{runner.first_name} {runner.last_name}</div>
                         <div className="text-sm text-slate-600">
                           {activity.distance_miles?.toFixed(2)} miles • {pace}/mi pace
                         </div>
@@ -420,7 +489,7 @@ export default async function DashboardPage() {
                       <form action={verifyActivity.bind(null, activity.id)}>
                         <button 
                           type="submit" 
-                          className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                          className="bg-[#00ff67] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#00e55c] transition-colors"
                         >
                           Verify
                         </button>
