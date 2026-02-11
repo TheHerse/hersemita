@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image";
 
 function LoginForm() {
   const [code, setCode] = useState("");
@@ -36,13 +37,29 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">Runner Portal</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute top-20 left-20 w-72 h-72 bg-[#00ff67]/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#00a7ff]/10 rounded-full blur-3xl" />
+      
+      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10">
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <div className="w-16 h-16 rounded-xl overflow-hidden bg-white">
+            <Image 
+              src="/logo.png" 
+              alt="Hersemita" 
+              width={64} 
+              height={64} 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
+            Runner Portal
+          </h1>
+        </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
               Enter your 6-digit access code
             </label>
             <input
@@ -50,26 +67,28 @@ function LoginForm() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               maxLength={6}
-              className="w-full border rounded-md px-3 py-2 text-center text-2xl tracking-widest"
+              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] font-bold text-slate-800 focus:outline-none focus:border-[#00a7ff] focus:ring-4 focus:ring-[#00a7ff]/10 transition-all"
               placeholder="000000"
               required
             />
           </div>
 
           {error && (
-            <div className="text-red-600 text-sm text-center">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm text-center py-2 rounded-lg font-medium">
+              {error}
+            </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 font-semibold"
+            className="w-full bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-xl hover:shadow-lg hover:shadow-[#00a7ff]/25 transition-all disabled:opacity-50 font-bold text-lg"
           >
             {loading ? "Checking..." : "Login"}
           </button>
         </form>
 
-        <div className="mt-4 text-center text-sm text-slate-500">
+        <div className="mt-6 text-center text-sm text-slate-500">
           Ask your coach for your access code
         </div>
       </div>
@@ -79,7 +98,11 @@ function LoginForm() {
 
 export default function RunnerLoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    }>
       <LoginForm />
     </Suspense>
   );
