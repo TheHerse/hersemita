@@ -1,129 +1,143 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import Image from "next/image";
-
-interface Runner {
-  first_name: string;
-  last_name: string;
-  grade: number;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 interface ExtractedData {
-  distance: number | null;
-  duration: string | null;
-  pace: string | null;
-  date: string | null;
-  confidence: 'high' | 'medium' | 'low';
+  distance?: number;
+  duration?: string;
+  pace?: string;
+  date?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  app?: 'garmin_connect' | 'garmin_clipboard' | 'strava' | 'apple_watch' | 'unknown';
+  rawDistance?: string;
+  rawPace?: string;
 }
 
-export default function RunnerUploadPage() {
+export default function UploadPage() {
   const router = useRouter();
-  const [runner, setRunner] = useState<Runner | null>(null);
+  
+  // Get runnerId from localStorage instead of URL
   const [runnerId, setRunnerId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  
-  // Multi-screenshot state
+  const [runnerName, setRunnerName] = useState<string>('');
+
   const [screenshots, setScreenshots] = useState<File[]>([]);
-  const [screenshotPreviews, setScreenshotPreviews] = useState<string[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [screenshotUrls, setScreenshotUrls] = useState<string[]>([]);
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+  const [detectedApp, setDetectedApp] = useState<string>('unknown');
+  const [rawValues, setRawValues] = useState<{distance?: string, pace?: string}>({});
   const [showVerification, setShowVerification] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   
-  // Form data for verification/correction
   const [formData, setFormData] = useState({
     distance: '',
     duration: '',
     pace: '',
-    date: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: ''
   });
 
+  // Check localStorage on mount
   useEffect(() => {
-    async function loadRunner() {
-      const id = localStorage.getItem("runner_id");
-      if (!id) {
-        router.push("/runner/login");
-        return;
-      }
-      setRunnerId(id);
-      const { data } = await supabase
-        .from("runners")
-        .select("first_name, last_name, grade")
-        .eq("id", id)
-        .single();
-
-      if (!data) {
-        localStorage.removeItem("runner_id");
-        router.push("/runner/login");
-        return;
-      }
-      setRunner(data);
-      setLoading(false);
+    const storedId = localStorage.getItem('runner_id');
+    const storedName = localStorage.getItem('runner_name');
+    
+    if (!storedId) {
+      // No login session, redirect to login
+      router.push('/runner/login');
+      return;
     }
-    loadRunner();
+    
+    setRunnerId(storedId);
+    if (storedName) setRunnerName(storedName);
+    setLoading(false);
   }, [router]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      // Add to existing screenshots (up to 3)
-      const newScreenshots = [...screenshots, ...files].slice(0, 3);
-      setScreenshots(newScreenshots);
-      
-      // Generate previews
-      const newPreviews = files.map(file => URL.createObjectURL(file));
-      setScreenshotPreviews([...screenshotPreviews, ...newPreviews].slice(0, 3));
+  const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(file => 
+      file.type.startsWith('image/') || file.name.endsWith('.gpx')
+    );
+    setScreenshots(prev => [...prev, ...files]);
+    setError(null);
+  }, []);
+
+  const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setScreenshots(prev => [...prev, ...files]);
+      setError(null);
     }
   };
 
   const removeScreenshot = (index: number) => {
-    const newScreenshots = screenshots.filter((_, i) => i !== index);
-    const newPreviews = screenshotPreviews.filter((_, i) => i !== index);
-    
-    // Revoke object URL to prevent memory leak
-    URL.revokeObjectURL(screenshotPreviews[index]);
-    
-    setScreenshots(newScreenshots);
-    setScreenshotPreviews(newPreviews);
+    setScreenshots(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getAppIcon = (app: string) => {
+    switch(app) {
+      case 'garmin_connect':
+      case 'garmin_clipboard':
+        return '📱 Garmin';
+      case 'strava':
+        return '🔥 Strava';
+      case 'apple_watch':
+        return '⌚ Apple Watch';
+      default:
+        return '📸 Screenshot';
+    }
   };
 
   const processScreenshots = async () => {
-    if (screenshots.length === 0) return;
+    if (screenshots.length === 0 || !runnerId) {
+      setError('Please select files');
+      return;
+    }
     
     setProcessing(true);
     setError(null);
     
     try {
-      const formData = new FormData();
+      const data = new FormData();
       screenshots.forEach(file => {
-        formData.append('screenshots', file);
+        data.append('screenshots', file);
       });
+      data.append('runnerId', runnerId);
       
       const response = await fetch('/api/parse-screenshot', {
         method: 'POST',
-        body: formData,
+        body: data,
       });
       
       if (!response.ok) {
-        throw new Error('Failed to process images');
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to process images');
       }
       
       const result = await response.json();
-      const data = result.data as ExtractedData;
-      setExtractedData(data);
+      const parsed = result.data as ExtractedData;
       
-      // Pre-fill form
-      setFormData({
-        distance: data.distance?.toString() || '',
-        duration: data.duration || '',
-        pace: data.pace || '',
-        date: data.date || new Date().toISOString().split('T')[0],
+      setExtractedData(parsed);
+      setScreenshotUrls(result.screenshotUrls || []);
+      setDetectedApp(result.detectedApp || 'unknown');
+      setRawValues({
+        distance: result.rawDistance,
+        pace: result.rawPace
       });
+      
+      // Pre-fill form with extracted data
+      setFormData(prev => ({
+        ...prev,
+        distance: parsed.distance?.toString() || '',
+        duration: parsed.duration || '',
+        pace: parsed.pace || '',
+        date: parsed.date || prev.date,
+      }));
       
       setShowVerification(true);
     } catch (err) {
@@ -133,59 +147,93 @@ export default function RunnerUploadPage() {
     }
   };
 
+  const parseDurationToSeconds = (duration: string): number => {
+    if (!duration) return 0;
+    const parts = duration.split(':').map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return parseFloat(duration) * 60 || 0;
+  };
+
+  const parsePaceToSeconds = (pace: string): number => {
+    if (!pace) return 0;
+    if (pace.includes(':')) {
+      const [min, sec] = pace.split(':').map(Number);
+      return (min || 0) * 60 + (sec || 0);
+    }
+    return parseFloat(pace) * 60 || 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!runnerId) return;
     
-    setUploading(true);
+    if (!runnerId || screenshotUrls.length === 0) {
+      setError('Missing required data. Please upload screenshots first.');
+      return;
+    }
+
+    if (!formData.distance || !formData.duration) {
+      setError('Please fill in distance and duration');
+      return;
+    }
+
+    setSubmitting(true);
     setError(null);
 
     try {
-      // Convert duration to seconds for storage
-      const [minutes, seconds] = formData.duration.split(':').map(Number);
-      const durationSeconds = (minutes * 60) + (seconds || 0);
-      
-      // Convert pace to seconds per mile
-      const [paceMin, paceSec] = formData.pace.split(':').map(Number);
-      const pacePerMile = (paceMin * 60) + (paceSec || 0);
+      const durationSeconds = parseDurationToSeconds(formData.duration);
+      const pacePerMile = parsePaceToSeconds(formData.pace) || 
+        (durationSeconds / parseFloat(formData.distance));
 
-      const { error: insertError } = await supabase.from("activities").insert({
+      const { error: insertError } = await supabase.from('activities').insert({
         runner_id: runnerId,
         garmin_activity_id: `screenshot_upload_${Date.now()}`,
         distance_miles: parseFloat(formData.distance),
         duration_seconds: durationSeconds,
         pace_per_mile: pacePerMile,
-        start_time: formData.date || new Date().toISOString(),
+        start_time: formData.date ? new Date(formData.date).toISOString() : new Date().toISOString(),
         verified: false,
         uploaded_by: 'runner',
         file_type: 'screenshot',
         original_filename: screenshots.map(s => s.name).join(', '),
+        screenshot_urls: screenshotUrls,
+        detected_app: detectedApp,
+        raw_distance: rawValues.distance || null,
+        raw_pace: rawValues.pace || null,
+        notes: formData.notes || null,
       });
 
-      if (insertError) throw new Error("Failed to save activity");
+      if (insertError) throw insertError;
 
-      setSuccess(true);
+      // Clear form and redirect to success
       setScreenshots([]);
-      setScreenshotPreviews([]);
+      setScreenshotUrls([]);
       setShowVerification(false);
-      setExtractedData(null);
+      setFormData({
+        distance: '',
+        duration: '',
+        pace: '',
+        date: new Date().toISOString().split('T')[0],
+        notes: ''
+      });
+      
+      router.push('/runner/upload/success');
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : 'Failed to save activity');
     } finally {
-      setUploading(false);
+      setSubmitting(false);
     }
   };
 
-  const resetUpload = () => {
-    setShowVerification(false);
-    setExtractedData(null);
-    setError(null);
+  const handleLogout = () => {
+    localStorage.removeItem('runner_id');
+    localStorage.removeItem('runner_name');
+    router.push('/runner/login');
   };
-
-  function logout() {
-    localStorage.removeItem("runner_id");
-    router.push("/runner/login");
-  }
 
   if (loading) {
     return (
@@ -195,230 +243,281 @@ export default function RunnerUploadPage() {
     );
   }
 
-  if (!runner) return null;
-
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg overflow-hidden bg-white">
-            <Image src="/logo.png" alt="Hersemita" width={32} height={32} className="w-full h-full object-contain" />
+      <header className="bg-white border-b border-slate-200 px-6 py-4">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl overflow-hidden">
+              <img src="/logo.png" alt="Hersemita" className="w-full h-full object-contain" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
+                Hersemita
+              </h1>
+              {runnerName && (
+                <p className="text-xs text-slate-500">Welcome, {runnerName}</p>
+              )}
+            </div>
           </div>
-          <h1 className="text-xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-            Upload Run
-          </h1>
+          <button 
+            onClick={handleLogout}
+            className="text-slate-600 hover:text-red-500 transition-colors text-sm font-medium"
+          >
+            Logout
+          </button>
         </div>
-        <button onClick={logout} className="text-red-500 hover:text-red-700 text-sm font-semibold hover:underline transition-colors">
-          Logout
-        </button>
       </header>
 
-      <main className="p-4 max-w-lg mx-auto">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
-          <h2 className="text-2xl font-bold text-slate-900 mb-1">
-            {runner.first_name} {runner.last_name}
-          </h2>
-          <p className="text-slate-600">Grade {runner.grade} • Upload your run activity</p>
-        </div>
-
-        {!showVerification ? (
-          // Screenshot Upload Stage
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm font-medium">
-                {error}
-              </div>
-            )}
-            
-            {success && (
-              <div className="bg-[#00ff67]/10 border border-[#00ff67]/30 text-[#00a7ff] px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2">
-                <svg className="w-5 h-5 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Run uploaded successfully! Your coach will verify it soon.
-                <button onClick={() => setSuccess(false)} className="ml-auto text-[#00a7ff] underline">Upload another</button>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Screenshot(s) of your Garmin Connect activity
-              </label>
-              <p className="text-xs text-slate-500 mb-3">
-                Take screenshots of the Overview tab (shows Distance, Time, Pace). Add the Stats tab if data is unclear.
-              </p>
-              
-              {/* Screenshot Previews */}
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                {screenshotPreviews.map((preview, index) => (
-                  <div key={index} className="relative aspect-[9/16] rounded-lg overflow-hidden border-2 border-slate-200">
-                    <img src={preview} alt={`Screenshot ${index + 1}`} className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => removeScreenshot(index)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                
-                {/* Add More Button (up to 3) */}
-                {screenshots.length < 3 && (
-                  <label className="aspect-[9/16] rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-[#00a7ff] hover:bg-slate-50 transition-colors">
-                    <svg className="w-8 h-8 text-slate-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span className="text-xs text-slate-500">Add</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleFileSelect}
-                      capture="environment"
-                    />
-                  </label>
-                )}
-              </div>
-              
-              {/* Mobile Camera Button */}
-              <label className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-lg cursor-pointer flex items-center justify-center gap-2 transition-colors font-medium">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Take Photo / Choose from Gallery
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  className="hidden" 
-                  onChange={handleFileSelect}
-                  capture="environment"
-                />
-              </label>
-            </div>
-
-            <button 
-              onClick={processScreenshots}
-              disabled={screenshots.length === 0 || processing}
-              className="w-full bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg hover:shadow-lg hover:shadow-[#00a7ff]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg flex items-center justify-center gap-2"
-            >
-              {processing ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Reading screenshots...
-                </>
-              ) : (
-                `Extract Data (${screenshots.length} image${screenshots.length !== 1 ? 's' : ''})`
-              )}
-            </button>
-
-            {/* Instructions */}
-            <details className="group">
-              <summary className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors list-none font-medium">
-                <svg className="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-                How to screenshot on Garmin Connect
-              </summary>
-              <div className="mt-3 space-y-3 p-4 bg-slate-50 rounded-lg text-sm">
-                <ol className="list-decimal list-inside space-y-2 text-slate-600">
-                  <li>Open Garmin Connect app</li>
-                  <li>Find your activity and tap it</li>
-                  <li>Stay on the <strong>Overview</strong> tab (shows big distance number)</li>
-                  <li>Take a screenshot (Volume Down + Power)</li>
-                  <li>If stats are unclear, also screenshot the <strong>Stats</strong> tab</li>
-                </ol>
-              </div>
-            </details>
+      <main className="p-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="mb-8 text-center">
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">Upload Your Run</h2>
+            <p className="text-slate-600">Take a photo of your watch or fitness app showing your run details</p>
           </div>
-        ) : (
-          // Verification Stage
-          <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-full bg-[#00ff67]/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="font-bold text-slate-900">Verify Extracted Data</h3>
-            </div>
-            
-            {extractedData && (
-              <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-600 mb-4">
-                Confidence: <span className={extractedData.confidence === 'high' ? 'text-[#00ff67] font-bold' : 'text-orange-500 font-bold'}>{extractedData.confidence}</span>
-                {extractedData.confidence !== 'high' && ' - Please verify numbers are correct'}
-              </div>
-            )}
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Distance (miles)</label>
-              <input 
-                type="number" 
-                step="0.01"
-                value={formData.distance}
-                onChange={(e) => setFormData({...formData, distance: e.target.value})}
-                className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#00a7ff] transition-colors font-semibold text-slate-900"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Duration (MM:SS or HH:MM:SS)</label>
-              <input 
-                type="text" 
-                placeholder="26:45"
-                value={formData.duration}
-                onChange={(e) => setFormData({...formData, duration: e.target.value})}
-                className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#00a7ff] transition-colors font-semibold text-slate-900"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Pace (min/mile)</label>
-              <input 
-                type="text" 
-                placeholder="8:30"
-                value={formData.pace}
-                onChange={(e) => setFormData({...formData, pace: e.target.value})}
-                className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#00a7ff] transition-colors font-semibold text-slate-900"
-                required
-              />
-              <p className="text-xs text-slate-500 mt-1">Auto-calculated if empty, but verify from screenshot</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Date</label>
-              <input 
-                type="date" 
-                value={formData.date}
-                onChange={(e) => setFormData({...formData, date: e.target.value})}
-                className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#00a7ff] transition-colors font-semibold text-slate-900"
-                required
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button 
-                type="button"
-                onClick={resetUpload}
-                className="px-6 py-3 border-2 border-slate-200 rounded-lg hover:bg-slate-50 font-semibold text-slate-700 transition-colors"
+          {!showVerification ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              {/* Upload Area */}
+              <div
+                onDrop={onDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-[#00a7ff] hover:bg-[#00a7ff]/5 transition-colors cursor-pointer mb-6"
               >
-                Back
-              </button>
-              <button 
-                type="submit" 
-                disabled={uploading}
-                className="flex-1 bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg hover:shadow-lg hover:shadow-[#00a7ff]/25 transition-all disabled:opacity-50 font-bold flex items-center justify-center gap-2"
+                <input
+                  type="file"
+                  accept="image/*,.gpx"
+                  multiple
+                  onChange={onFileSelect}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload" className="cursor-pointer block">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#00a7ff]/10 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-[#00a7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-lg font-semibold text-slate-700 mb-1">Drop screenshots here or click to browse</p>
+                  <p className="text-sm text-slate-500">Supports: Garmin, Strava, Apple Watch, GPX files</p>
+                </label>
+              </div>
+
+              {/* Preview Selected Files */}
+              {screenshots.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Selected Files ({screenshots.length})</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {screenshots.map((file, idx) => (
+                      <div key={idx} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200">
+                        {file.type.startsWith('image/') ? (
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Preview ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                            <span className="text-xs font-medium text-slate-600">GPX</span>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => removeScreenshot(idx)}
+                          className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 truncate">
+                          {file.name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={processScreenshots}
+                disabled={screenshots.length === 0 || processing}
+                className="w-full bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg font-semibold hover:shadow-lg hover:shadow-[#00a7ff]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {uploading ? 'Saving...' : 'Confirm & Upload'}
+                {processing ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Extract Data from Images
+                  </>
+                )}
               </button>
+
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => setShowVerification(true)}
+                  className="text-slate-500 hover:text-[#00a7ff] text-sm font-medium"
+                >
+                  Skip OCR - Enter manually →
+                </button>
+              </div>
             </div>
-          </form>
-        )}
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 rounded-full bg-[#00ff67]/10 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Verify Your Run Details</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    {detectedApp !== 'unknown' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        {getAppIcon(detectedApp)}
+                      </span>
+                    )}
+                    {extractedData?.confidence && (
+                      <span className={`text-xs ${
+                        extractedData.confidence === 'high' ? 'text-[#00ff67]' : 
+                        extractedData.confidence === 'medium' ? 'text-yellow-600' : 'text-orange-500'
+                      }`}>
+                        Confidence: {extractedData.confidence}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Show uploaded screenshots */}
+              {screenshotUrls.length > 0 && (
+                <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                  <p className="text-sm font-semibold text-slate-700 mb-2">Uploaded Screenshots:</p>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {screenshotUrls.map((url, idx) => (
+                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                        <img src={url} alt={`Screenshot ${idx + 1}`} className="w-24 h-32 object-cover rounded-lg border border-slate-200" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      Distance (miles)
+                      {rawValues.distance && (
+                        <span className="ml-2 text-xs font-normal text-slate-500">
+                          (Detected: {rawValues.distance})
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={formData.distance}
+                      onChange={(e) => setFormData(prev => ({ ...prev, distance: e.target.value }))}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
+                      placeholder="3.1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.date}
+                      onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Duration (HH:MM:SS or MM:SS)</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.duration}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duration: e.target.value }))}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
+                      placeholder="26:30 or 1:26:30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      Pace (min:sec/mile)
+                      {rawValues.pace && (
+                        <span className="ml-2 text-xs font-normal text-slate-500">
+                          (Detected: {rawValues.pace})
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.pace}
+                      onChange={(e) => setFormData(prev => ({ ...prev, pace: e.target.value }))}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
+                      placeholder="8:32"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Optional - will calculate automatically</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Notes (optional)</label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]/50 focus:border-[#00a7ff]"
+                    rows={3}
+                    placeholder="How did the run feel? Any notes for your coach?"
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowVerification(false)}
+                    className="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg font-semibold hover:bg-slate-50 transition-colors"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg font-semibold hover:shadow-lg hover:shadow-[#00a7ff]/20 transition-all disabled:opacity-50"
+                  >
+                    {submitting ? 'Saving...' : 'Submit to Coach'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

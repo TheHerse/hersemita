@@ -9,6 +9,7 @@ import RecentActivityTable from "@/components/RecentActivityTable";
 import RunnerPerformanceTable from "@/components/RunnerPerformanceTable";
 import DeleteActivityButton from "@/components/DeleteActivityButton";
 
+// Updated interface with new fields
 interface ActivityWithRunner {
   id: string;
   runner_id: string;
@@ -20,9 +21,60 @@ interface ActivityWithRunner {
   verified: boolean;
   runner_name: string;
   file_type: string;
+  screenshot_urls?: string[];
+  detected_app?: string; // NEW: garmin_connect, strava, apple_watch, etc.
+  raw_distance?: string; // NEW: original text like "5.01 km"
+  raw_pace?: string; // NEW: original text like "4:51 /km"
 }
 
 type PaceTrend = 'improving' | 'declining' | 'stable';
+
+// Screenshot Viewer Component
+const ScreenshotViewer = ({ urls }: { urls: string[] }) => {
+  if (!urls || urls.length === 0) return null;
+  
+  return (
+    <div className="mt-3 space-y-2">
+      <p className="text-xs font-semibold text-slate-600">Uploaded Screenshots:</p>
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {urls.map((url, idx) => (
+          <a 
+            key={idx} 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex-shrink-0 relative group"
+          >
+            <img 
+              src={url} 
+              alt={`Screenshot ${idx + 1}`} 
+              className="w-24 h-32 object-cover rounded-lg border border-slate-200 hover:border-[#00a7ff] transition-colors"
+            />
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center text-white text-xs">
+              View
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Helper to get app icon and display name
+const getAppInfo = (app?: string) => {
+  switch(app) {
+    case 'garmin_connect':
+      return { icon: '📱', name: 'Garmin Connect', color: 'text-blue-600 bg-blue-50' };
+    case 'garmin_clipboard':
+      return { icon: '📋', name: 'Garmin Clipboard', color: 'text-blue-600 bg-blue-50' };
+    case 'strava':
+      return { icon: '🔥', name: 'Strava', color: 'text-orange-600 bg-orange-50' };
+    case 'apple_watch':
+      return { icon: '⌚', name: 'Apple Watch', color: 'text-red-600 bg-red-50' };
+    default:
+      return { icon: '📸', name: 'Screenshot', color: 'text-slate-600 bg-slate-100' };
+  }
+};
 
 async function verifyActivity(activityId: string) {
   "use server";
@@ -105,6 +157,7 @@ export default async function DashboardPage() {
     .select("*")
     .eq("coach_id", coach?.id);
 
+  // Make sure to select the new columns from Supabase
   const { data: activities } = await supabase
     .from("activities")
     .select(`
@@ -123,6 +176,7 @@ export default async function DashboardPage() {
   const activityCount = activities?.length || 0;
   const pendingCount = activities?.filter(a => !a.verified).length || 0;
 
+  // Updated mapping to include new fields
   const formattedActivities: ActivityWithRunner[] = activities?.map(activity => ({
     id: activity.id,
     runner_id: activity.runner_id,
@@ -133,7 +187,11 @@ export default async function DashboardPage() {
     pace_per_mile: activity.pace_per_mile,
     start_time: activity.start_time,
     verified: activity.verified,
-    file_type: activity.file_type || 'gpx'
+    file_type: activity.file_type || 'gpx',
+    screenshot_urls: activity.screenshot_urls || [],
+    detected_app: activity.detected_app, // NEW
+    raw_distance: activity.raw_distance, // NEW
+    raw_pace: activity.raw_pace // NEW
   })) || [];
 
   const runnerStats = runners?.map(runner => {
@@ -350,14 +408,35 @@ export default async function DashboardPage() {
                 const paceSeconds = Math.round(activity.pace_per_mile % 60).toString().padStart(2, '0');
                 const paceDisplay = `${paceMinutes}:${paceSeconds}`;
                 const runner = activity.runners;
+                const appInfo = getAppInfo(activity.detected_app); // Get app icon and color
                 
                 return (
                   <div key={activity.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                    {/* UPDATED HEADER with App Detection */}
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <div className="font-medium text-lg text-slate-900">{runner.first_name} {runner.last_name}</div>
-                        <div className="text-sm text-slate-600">
-                          {new Date(activity.start_time).toLocaleDateString()} • {activity.file_type?.toUpperCase() || 'GPX'}
+                        <div className="font-medium text-lg text-slate-900">
+                          {runner.first_name} {runner.last_name}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-slate-600 mt-1 flex-wrap">
+                          <span>{new Date(activity.start_time).toLocaleDateString()}</span>
+                          <span>•</span>
+                          {/* Show App Type with Icon */}
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${appInfo.color}`}>
+                            <span>{appInfo.icon}</span>
+                            <span className="capitalize">{appInfo.name}</span>
+                          </span>
+                          {/* Show Raw Values if available */}
+                          {activity.raw_distance && (
+                            <span className="text-xs text-slate-400" title="Original detected value">
+                              (Raw: {activity.raw_distance})
+                            </span>
+                          )}
+                          {activity.raw_pace && (
+                            <span className="text-xs text-slate-400" title="Original detected value">
+                              @ {activity.raw_pace}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -371,11 +450,21 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                     
-                    <form action={updateActivity} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-3">
+                    {/* Screenshot Viewer */}
+                    {activity.screenshot_urls && activity.screenshot_urls.length > 0 && (
+                      <ScreenshotViewer urls={activity.screenshot_urls} />
+                    )}
+                    
+                    <form action={updateActivity} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-3 mt-4">
                       <input type="hidden" name="activityId" value={activity.id} />
                       
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Distance (miles)</label>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Distance (miles)
+                          {activity.raw_distance && (
+                            <span className="ml-1 text-slate-400 font-normal">(was {activity.raw_distance})</span>
+                          )}
+                        </label>
                         <input 
                           type="number" 
                           name="distance" 
@@ -407,6 +496,9 @@ export default async function DashboardPage() {
                             placeholder="sec"
                           />
                         </div>
+                        {activity.raw_pace && (
+                          <p className="text-xs text-slate-400 mt-1">Detected: {activity.raw_pace}</p>
+                        )}
                       </div>
                       
                       <div>
@@ -477,6 +569,7 @@ export default async function DashboardPage() {
                   const paceSeconds = Math.round(activity.pace_per_mile % 60).toString().padStart(2, '0');
                   const pace = `${paceMinutes}:${paceSeconds}`;
                   const runner = activity.runners;
+                  const appInfo = getAppInfo(activity.detected_app);
                   
                   return (
                     <div key={activity.id} className="flex justify-between items-center py-3 border-b border-slate-100 last:border-0">
@@ -484,6 +577,22 @@ export default async function DashboardPage() {
                         <div className="font-medium text-slate-900">{runner.first_name} {runner.last_name}</div>
                         <div className="text-sm text-slate-600">
                           {activity.distance_miles?.toFixed(2)} miles • {pace}/mi pace
+                        </div>
+                        {/* Show app info in quick verify */}
+                        <div className="flex items-center gap-2 mt-1">
+                          {activity.detected_app && activity.detected_app !== 'unknown' && (
+                            <span className="text-xs text-slate-500">
+                              {appInfo.icon} {appInfo.name}
+                            </span>
+                          )}
+                          {activity.screenshot_urls && activity.screenshot_urls.length > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-[#00a7ff]">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              {activity.screenshot_urls.length} screenshot{activity.screenshot_urls.length > 1 ? 's' : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <form action={verifyActivity.bind(null, activity.id)}>
