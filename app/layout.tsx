@@ -27,15 +27,36 @@ export default function RootLayout({
           colorTextSecondary: '#cbd5e1',
         },
       }}
-      // ADD THESE 4 LINES:
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
       afterSignInUrl="/dashboard"
       afterSignUpUrl="/dashboard"
     >
       <html lang="en" className="dark">
-        <body className={`${inter.className} bg-slate-900 text-slate-50 antialiased`}>
-          {children}
+        <body className={`${inter.className} bg-slate-900 text-slate-50 antialiased flex flex-col min-h-screen`}>
+          <main className="flex-grow">
+            {children}
+          </main>
+          
+          <footer className="bg-slate-950 border-t border-slate-800 py-6 mt-auto">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="text-center md:text-left">
+                <p className="text-sm text-slate-400">© 2026 Hersemita. All rights reserved.</p>
+                <p className="text-xs text-slate-500 mt-1">Clarksville, TN</p>
+              </div>        
+              <div className="flex items-center gap-6">
+                <a href="/privacy" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+                  Privacy
+                </a>
+                <a href="/terms" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+                  Terms
+                </a>
+                <a href="mailto:support@hersemita.com" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+                  support@hersemita.com
+                </a>
+              </div>
+            </div>
+          </footer>
         </body>
       </html>
     </ClerkProvider>
