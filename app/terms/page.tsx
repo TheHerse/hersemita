@@ -2,6 +2,11 @@ export default function TermsOfService() {
   return (
     <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto bg-slate-800 rounded-lg border border-slate-700 p-8 shadow-xl">
+        <div className="mb-6 p-4 bg-slate-900 rounded border border-slate-700">
+            <p className="text-sm text-slate-400">
+                These Terms of Service constitute an agreement between you and Herson Hernandez DBA Hersemita.
+            </p>
+        </div>
         <h1 className="text-3xl font-bold text-slate-50 mb-8">Terms of Service</h1>
         
         <div className="space-y-6 text-slate-300 leading-relaxed">
