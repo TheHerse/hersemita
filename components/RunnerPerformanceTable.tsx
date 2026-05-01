@@ -43,7 +43,7 @@ export default function RunnerPerformanceTable({ performances }: { performances:
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00ff67] to-[#00a7ff] flex items-center justify-center">
           <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,7 +53,44 @@ export default function RunnerPerformanceTable({ performances }: { performances:
         <h3 className="text-xl font-semibold text-slate-900">Runner Performance</h3>
       </div>
       
-      <div className="overflow-x-auto">
+      <div className="space-y-3 md:hidden">
+        {performances.map((perf) => (
+          <div key={perf.runner_id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-bold text-white">{perf.runner_name}</div>
+                <div className="mt-1 text-sm text-slate-400">{perf.total_activities} activities</div>
+              </div>
+              <span className="rounded-full bg-[#00a7ff]/10 px-3 py-1 text-sm font-bold text-[#7dd3fc]">
+                {formatDistance(perf.total_distance)} mi
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-slate-400">Avg Pace</p>
+                <p className="font-bold text-white">{formatPace(perf.avg_pace)}/mi</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Best Pace</p>
+                <p className="font-bold text-[#00ff67]">{formatPace(perf.best_pace)}/mi</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Trend</p>
+                <div className="text-sm">{getTrendIcon(perf.pace_trend)}</div>
+              </div>
+              <div>
+                <p className="text-slate-400">7-Day Change</p>
+                <p className={`font-bold ${getChangeColor(perf.distance_change_percent)}`}>
+                  {perf.distance_change_percent > 0 ? '+' : ''}
+                  {perf.distance_change_percent.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200">

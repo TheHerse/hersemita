@@ -13,8 +13,12 @@ interface Activity {
 
 export default function RunnerTrendChart({ activities }: { activities: Activity[] }) {
   const chartData = useMemo(() => {
+    const latestActivityTime = activities.reduce((latest, activity) => {
+      return Math.max(latest, new Date(activity.start_time).getTime());
+    }, 0);
+
     const last7Days = activities.filter(a => {
-      const daysAgo = (Date.now() - new Date(a.start_time).getTime()) / (1000 * 60 * 60 * 24);
+      const daysAgo = (latestActivityTime - new Date(a.start_time).getTime()) / (1000 * 60 * 60 * 24);
       return daysAgo <= 7 && a.verified;
     });
 
@@ -27,7 +31,7 @@ export default function RunnerTrendChart({ activities }: { activities: Activity[
     }, {} as Record<string, { distance: number; count: number }>);
 
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date().getDay();
+    const today = latestActivityTime ? new Date(latestActivityTime).getDay() : 0;
     const orderedDays = [...days.slice(today + 1), ...days.slice(0, today + 1)].slice(-7);
 
     return orderedDays.map(day => ({
@@ -40,7 +44,7 @@ export default function RunnerTrendChart({ activities }: { activities: Activity[
   const maxDistance = Math.max(...chartData.map(d => d.distance), 1);
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-8 h-8 rounded-lg bg-[#00ff67]/10 flex items-center justify-center">
           <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -50,8 +54,8 @@ export default function RunnerTrendChart({ activities }: { activities: Activity[
         <h3 className="text-xl font-semibold text-slate-900">7-Day Activity Trend</h3>
       </div>
 
-      <div className="flex items-end justify-between h-48 gap-2">
-        {chartData.map((data, index) => (
+      <div className="flex items-end justify-between h-40 gap-1.5 sm:h-48 sm:gap-2">
+        {chartData.map((data) => (
           <div key={data.day} className="flex-1 flex flex-col items-center gap-2">
             <div className="w-full bg-slate-100 rounded-t-lg relative overflow-hidden" style={{ height: '100%' }}>
               <div 

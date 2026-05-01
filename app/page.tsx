@@ -1,9 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <main className="min-h-screen hersemita-auth-bg text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
       {/* Background decorative elements */}
       <div className="absolute top-20 left-20 w-72 h-72 bg-[#00ff67]/10 rounded-full blur-3xl" />
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#00a7ff]/10 rounded-full blur-3xl" />
@@ -60,7 +59,7 @@ export default function Home() {
         
         {/* Two buttons side by side */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
-          <a 
+          <Link 
             href="/sign-in"
             className="group relative bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 inline-block text-center shadow-lg shadow-[#00a7ff]/25 hover:shadow-xl hover:shadow-[#00a7ff]/40 hover:scale-105"
           >
@@ -70,9 +69,9 @@ export default function Home() {
               </svg>
               Coach Login
             </span>
-          </a>
+          </Link>
           
-          <a 
+          <Link 
             href="/runner/login"
             className="group bg-white/10 backdrop-blur-sm border-2 border-[#00ff67]/50 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 inline-block text-center hover:bg-[#00ff67]/20 hover:border-[#00ff67] hover:scale-105"
           >
@@ -82,7 +81,7 @@ export default function Home() {
               </svg>
               Runner Portal
             </span>
-          </a>
+          </Link>
         </div>
 
         {/* Feature pills */}
@@ -108,10 +107,6 @@ export default function Home() {
         </div>
       </div>
       
-      {/* Footer */}
-      <div className="absolute bottom-6 text-slate-500 text-sm">
-        © 2025 Hersemita. All rights reserved.
-      </div>
     </main>
   );
 }

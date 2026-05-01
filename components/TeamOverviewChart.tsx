@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface RunnerStats {
   runner_id: string;
@@ -15,6 +15,35 @@ interface TeamOverviewChartProps {
   runnerStats: RunnerStats[];
 }
 
+interface TooltipPayload {
+  value: number;
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: TooltipPayload[];
+  label?: string;
+}) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200">
+        <p className="font-semibold text-slate-900 mb-1">{label}</p>
+        <p className="text-[#00a7ff] text-sm">
+          Distance: {payload[0].value.toFixed(1)} mi
+        </p>
+        <p className="text-[#00ff67] text-sm">
+          Activities: {payload[1].value}
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProps) {
   const data = runnerStats.map(r => ({
     name: r.runner_name,
@@ -23,25 +52,8 @@ export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProp
     count: r.activity_count
   }));
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200">
-          <p className="font-semibold text-slate-900 mb-1">{label}</p>
-          <p className="text-[#00a7ff] text-sm">
-            Distance: {payload[0].value.toFixed(1)} mi
-          </p>
-          <p className="text-[#00ff67] text-sm">
-            Activities: {payload[1].value}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-8 h-8 rounded-lg bg-[#00a7ff]/10 flex items-center justify-center">
           <svg className="w-4 h-4 text-[#00a7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -51,7 +63,7 @@ export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProp
         <h3 className="text-xl font-semibold text-slate-900">Team Overview</h3>
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 80 }}>
           <XAxis 
             dataKey="name" 
@@ -93,7 +105,7 @@ export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProp
         </BarChart>
       </ResponsiveContainer>
       
-      <div className="mt-6 grid grid-cols-3 gap-4">
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <div className="bg-gradient-to-br from-[#00a7ff]/10 to-[#00a7ff]/5 p-4 rounded-xl border border-[#00a7ff]/20">
           <div className="text-2xl font-bold text-[#00a7ff]">
             {runnerStats.reduce((sum, r) => sum + r.total_distance, 0).toFixed(1)} mi

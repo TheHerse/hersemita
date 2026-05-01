@@ -1,6 +1,6 @@
 export default function TermsOfService() {
   return (
-    <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen hersemita-page-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto bg-slate-800 rounded-lg border border-slate-700 p-8 shadow-xl">
         <div className="mb-6 p-4 bg-slate-900 rounded border border-slate-700">
             <p className="text-sm text-slate-400">

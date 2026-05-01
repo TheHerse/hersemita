@@ -17,12 +17,20 @@ export async function sendMassSMS(
     const twilio = twilioModule.default;
     const client = twilio(accountSid, authToken);
 
+    const normalizedPhones = parentPhones
+      .map(formatPhoneForSms)
+      .filter((phone): phone is string => Boolean(phone));
+
+    if (normalizedPhones.length === 0) {
+      return { success: false, error: 'No valid parent phone numbers' };
+    }
+
     const results = await Promise.all(
-      parentPhones.map(phone => 
+      normalizedPhones.map(phone => 
         client.messages.create({
           body: message,
           from: fromNumber,
-          to: phone.startsWith('+') ? phone : `+1${phone}`,
+          to: phone,
         })
       )
     );
@@ -33,4 +41,15 @@ export async function sendMassSMS(
     console.error('Mass SMS failed:', error);
     return { success: false, error: String(error) };
   }
+}
+
+function formatPhoneForSms(phone: string) {
+  const trimmed = phone.trim();
+  if (trimmed.startsWith('+')) return trimmed;
+
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+
+  return null;
 }

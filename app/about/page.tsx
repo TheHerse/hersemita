@@ -1,6 +1,6 @@
 export default function About() {
   return (
-    <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen hersemita-page-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto bg-slate-800 rounded-lg border border-slate-700 p-8 shadow-xl">
         <h1 className="text-3xl font-bold text-slate-50 mb-6">About Hersemita</h1>
         

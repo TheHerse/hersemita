@@ -1,6 +1,6 @@
 export default function PrivacyPolicy() {
   return (
-    <div className="min-h-screen bg-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen hersemita-page-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <div className="mb-6 p-4 bg-slate-800 rounded border border-slate-700">
           <p className="text-sm text-slate-400">
@@ -38,7 +38,7 @@ export default function PrivacyPolicy() {
 
             <section>
               <h2 className="text-xl font-semibold text-slate-100 mb-3">Contact Us</h2>
-              <p>Email: herson@hersemita.com</p>
+              <p>Email: support@hersemita.com</p>
               <p>Location: Clarksville, TN</p>
             </section>
 

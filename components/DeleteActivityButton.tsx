@@ -1,6 +1,8 @@
 "use client";
 
-export default function DeleteActivityButton({ activityId }: { activityId: string }) {
+export default function DeleteActivityButton({ activityId: _activityId }: { activityId: string }) {
+  void _activityId;
+
   return (
     <button 
       type="submit" 

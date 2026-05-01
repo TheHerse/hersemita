@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 import Link from "next/link";
+import { sendMassSMS } from "@/lib/twilio";
+import CoachMobileMenu from "@/components/CoachMobileMenu";
 
 async function sendMessage(formData: FormData) {
   "use server";
@@ -15,6 +17,14 @@ async function sendMessage(formData: FormData) {
     .select("id, name")
     .eq("email", userId)
     .single();
+
+  const { data: coachProfile } = coach?.id
+    ? await supabase
+        .from("coaches")
+        .select("school_name")
+        .eq("id", coach.id)
+        .single()
+    : { data: null };
   
   const message = formData.get("message") as string;
   const messageType = formData.get("type") as string;
@@ -28,19 +38,23 @@ async function sendMessage(formData: FormData) {
     .not("parent_phone", "is", null);
   
   const phones = runners?.map(r => r.parent_phone!).filter(Boolean) || [];
-  const runnerNames = runners?.map(r => `${r.first_name} ${r.last_name}`) || [];
+  const result = await sendMassSMS(
+    phones,
+    `${coachProfile?.school_name ? `${coachProfile.school_name} - ` : ""}Coach ${coach?.name || ""}: ${message}`.trim()
+  );
   
-  console.log(`📱 ${messageType.toUpperCase()} MESSAGE to ${phones.length} parents:`);
-  console.log(`Runners: ${runnerNames.join(", ")}`);
-  console.log(`From: Coach ${coach?.name}`);
-  console.log(`Message: ${message}`);
-  
-  redirect("/runners/message?sent=1");
+  const status = result.success ? "sent" : result.mock ? "mock" : "error";
+  redirect(`/runners/message?status=${status}&count=${phones.length}&type=${messageType}`);
 }
 
-export default async function MessageParentsPage() {
+export default async function MessageParentsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ status?: string; count?: string; type?: string }>;
+}) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const params = await searchParams;
 
   const { data: coach } = await supabase
     .from("coaches")
@@ -58,25 +72,40 @@ export default async function MessageParentsPage() {
   const runnersWithoutPhone = runners?.filter(r => !r.parent_phone) || [];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen hersemita-page-bg">
+      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-50 sm:px-6 sm:py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
             <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
             Hersemita
           </h1>
+        </Link>
+        <div className="hidden items-center gap-3 sm:flex">
+          <Link href="/dashboard" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Dashboard</Link>
+          <Link href="/runners" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Runners</Link>
+          <Link href="/groups" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Groups</Link>
+          <Link href="/activities" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Activities</Link>
+          <Link href="/settings" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Settings</Link>
         </div>
-        <div className="flex gap-4 items-center">
-          <Link href="/dashboard" className="text-slate-600 hover:text-[#00a7ff] transition-colors font-medium">Dashboard</Link>
-          <Link href="/runners" className="text-slate-600 hover:text-[#00a7ff] transition-colors font-medium">Runners</Link>
+        <CoachMobileMenu
+          links={[
+            { href: "/dashboard", label: "Dashboard" },
+            { href: "/runners", label: "Runners" },
+            { href: "/groups", label: "Groups" },
+            { href: "/activities", label: "Activities" },
+            { href: "/runners/new", label: "Add Runner" },
+            { href: "/settings", label: "Settings" },
+          ]}
+        />
         </div>
       </header>
 
-      <main className="p-8">
+      <main className="p-4 sm:p-6 lg:p-8">
         <div className="max-w-3xl mx-auto">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-8 h-8 rounded-lg bg-[#00a7ff]/10 flex items-center justify-center">
                 <svg className="w-4 h-4 text-[#00a7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,9 +114,23 @@ export default async function MessageParentsPage() {
               </div>
               <h1 className="text-2xl font-bold text-slate-900">Message Parents</h1>
             </div>
-            <p className="text-slate-600 mb-6 ml-11">
+            <p className="text-slate-600 mb-6 sm:ml-11">
               {runnersWithPhone.length} of {runners?.length || 0} runners have parent phone numbers
             </p>
+
+            {params?.status && (
+              <div className={`mb-6 rounded-lg border p-4 text-sm ${
+                params.status === "sent"
+                  ? "border-[#00ff67]/30 bg-[#00ff67]/10 text-green-800"
+                  : params.status === "mock"
+                    ? "border-orange-200 bg-orange-50 text-orange-800"
+                    : "border-red-200 bg-red-50 text-red-700"
+              }`}>
+                {params.status === "sent" && `Sent ${params.count || 0} parent message${params.count === "1" ? "" : "s"}.`}
+                {params.status === "mock" && `Twilio is not fully configured yet. Hersemita prepared ${params.count || 0} message${params.count === "1" ? "" : "s"} but did not send live SMS.`}
+                {params.status === "error" && "Message sending failed. Check Twilio credentials, verification, and phone-number formatting."}
+              </div>
+            )}
             
             <form action={sendMessage} className="space-y-6">
               <div>
@@ -155,7 +198,7 @@ export default async function MessageParentsPage() {
                 <p className="text-xs text-slate-500 mt-1">320 character limit for SMS</p>
               </div>
               
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <button 
                   type="submit" 
                   className="flex-1 bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg hover:shadow-lg hover:shadow-[#00a7ff]/25 transition-all font-bold"
@@ -164,7 +207,7 @@ export default async function MessageParentsPage() {
                 </button>
                 <Link 
                   href="/dashboard" 
-                  className="px-6 py-3 border-2 border-slate-200 rounded-lg hover:bg-slate-50 font-semibold text-slate-700 transition-colors"
+                  className="px-6 py-3 border-2 border-slate-200 rounded-lg hover:bg-slate-50 font-semibold text-slate-700 transition-colors text-center"
                 >
                   Cancel
                 </Link>
@@ -176,7 +219,7 @@ export default async function MessageParentsPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <b>Note:</b> SMS integration not yet enabled. Messages will be logged to console for testing.
+                <b>Note:</b> Parent texting requires Twilio credentials and verification to be approved for live sending.
               </p>
             </div>
           </div>

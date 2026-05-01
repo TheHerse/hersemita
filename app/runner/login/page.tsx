@@ -6,11 +6,11 @@ import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 
 function LoginForm() {
-  const [code, setCode] = useState("");
+  const searchParams = useSearchParams();
+  const [code, setCode] = useState(searchParams.get("code") || "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/runner/upload";
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,7 +37,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen hersemita-auth-bg flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute top-20 left-20 w-72 h-72 bg-[#00ff67]/10 rounded-full blur-3xl" />
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#00a7ff]/10 rounded-full blur-3xl" />
       
@@ -99,7 +99,7 @@ function LoginForm() {
 export default function RunnerLoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen hersemita-auth-bg flex items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     }>

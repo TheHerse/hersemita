@@ -17,6 +17,23 @@ type ParsedRunData = {
   rawPace: string | null;
 };
 
+function formatSupabaseError(error: unknown) {
+  if (!error) return 'Unknown Supabase error';
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    const details = error as {
+      message?: string;
+      details?: string;
+      hint?: string;
+      code?: string;
+    };
+    return [details.message, details.details, details.hint, details.code && `Code: ${details.code}`]
+      .filter(Boolean)
+      .join(' | ') || JSON.stringify(error);
+  }
+  return String(error);
+}
+
 export default function UploadPage() {
   const router = useRouter();
   const [runnerId, setRunnerId] = useState<string | null>(null);
@@ -70,7 +87,7 @@ export default function UploadPage() {
     setScreenshots(prev => prev.filter((_, i) => i !== index));
   };
 
-  const processImages = async () => {
+  const processImages = async (skipOcr = false) => {
     if (!runnerId || screenshots.length === 0) {
       setError('Please select files');
       return;
@@ -79,6 +96,7 @@ export default function UploadPage() {
     setProcessing(true);
     setError(null);
     
+    let uploadedUrls: string[] = [];
     try {
       // Upload to Supabase
       const urls: string[] = [];
@@ -95,10 +113,11 @@ export default function UploadPage() {
         const { data } = supabase.storage.from('activity-screenshots').getPublicUrl(fileName);
         urls.push(data.publicUrl);
       }
+      uploadedUrls = urls;
       setScreenshotUrls(urls);
 
-      // OCR in browser
-      if (typeof window !== 'undefined') {
+      // OCR in browser. The runner still reviews every parsed value before sending.
+      if (!skipOcr && typeof window !== 'undefined') {
         const { createWorker } = await import('tesseract.js');
         const worker = await createWorker('eng');
         const { data: { text } } = await worker.recognize(screenshots[0]);
@@ -125,7 +144,13 @@ export default function UploadPage() {
       setShowForm(true);
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to process');
+      if (uploadedUrls.length > 0) {
+        setScreenshotUrls(uploadedUrls);
+        setError('The screenshot was saved, but the parser could not read it. Please enter the run details manually.');
+        setShowForm(true);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to process');
+      }
     } finally {
       setProcessing(false);
     }
@@ -133,7 +158,11 @@ export default function UploadPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!runnerId || screenshotUrls.length === 0) return;
+    if (!runnerId || screenshotUrls.length === 0) {
+      setError('Please upload at least one screenshot so your coach can verify the run.');
+      setShowForm(false);
+      return;
+    }
 
     // Parse duration to seconds
     const parts = formData.duration.split(':').map(Number);
@@ -170,8 +199,9 @@ export default function UploadPage() {
       });
 
       if (insertError) {
-        console.error('Insert error:', insertError);
-        throw insertError;
+        const message = formatSupabaseError(insertError);
+        console.error('Insert error:', message, insertError);
+        throw new Error(message);
       }
       
       router.push('/runner/upload/success');
@@ -180,10 +210,10 @@ export default function UploadPage() {
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading...</div>;
+  if (loading) return <div className="min-h-screen hersemita-page-bg flex items-center justify-center text-white">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen hersemita-page-bg">
       <header className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-3xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -228,19 +258,19 @@ export default function UploadPage() {
 
             {error && <div className="mb-4 p-3 bg-red-50 text-red-600 rounded text-sm">{error}</div>}
 
-            <button onClick={processImages} disabled={screenshots.length === 0 || processing} className="w-full bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg font-bold disabled:opacity-50">
+            <button onClick={() => processImages()} disabled={screenshots.length === 0 || processing} className="w-full bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg font-bold disabled:opacity-50">
               {processing ? 'Processing...' : 'Extract Data from Images'}
             </button>
 
-            <button onClick={() => setShowForm(true)} className="w-full mt-3 border border-slate-300 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-50">
-              Skip OCR - Enter Manually
+            <button onClick={() => processImages(true)} disabled={screenshots.length === 0 || processing} className="w-full mt-3 border border-slate-300 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50">
+              Save Screenshot and Enter Manually
             </button>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center gap-2 mb-6">
               <span className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center">✓</span>
-              <h3 className="font-semibold text-lg">Verify Details</h3>
+              <h3 className="font-semibold text-lg">Review Details Before Sending</h3>
             </div>
 
             {screenshotUrls.length > 0 && (
@@ -286,7 +316,7 @@ export default function UploadPage() {
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-slate-300 py-3 rounded-lg font-bold hover:bg-slate-50">Back</button>
-                <button type="submit" className="flex-1 bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg font-bold">Submit</button>
+                <button type="submit" className="flex-1 bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg font-bold">Submit for Coach Review</button>
               </div>
             </form>
           </div>

@@ -26,14 +26,15 @@ export async function parseActivityFile(file: File, fileType: string): Promise<P
 
 function parseFIT(data: Uint8Array): Promise<ParsedActivity> {
   const fitParser = new FitParser({ force: true, speedUnit: 'm/s' });
+  const fitBuffer = new ArrayBuffer(data.byteLength);
+  new Uint8Array(fitBuffer).set(data);
   
   return new Promise((resolve, reject) => {
-    // @ts-ignore - Bypass TypeScript's strict typing (runtime works fine)
-    fitParser.parse(data, (err: any, parsedData: any) => {
+    fitParser.parse(fitBuffer, (err, parsedData) => {
       if (err) return reject(err);
-      if (!parsedData?.records) return reject(new Error('Invalid FIT file'));
+      if (!parsedData?.sessions?.length) return reject(new Error('Invalid FIT file'));
       
-      const session = parsedData.records.find((r: any) => r.type === 'session');
+      const session = parsedData.sessions[0];
       if (!session?.total_distance || !session?.total_timer_time) {
         return reject(new Error('Invalid FIT file: Missing session data'));
       }
