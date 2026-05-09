@@ -1,10 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
 import Link from "next/link";
 import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
-import CoachMobileMenu from "@/components/CoachMobileMenu";
+import CoachHeader from "@/components/CoachHeader";
 
 export default async function RunnersPage() {
   const { userId } = await auth();
@@ -54,46 +53,8 @@ export default async function RunnersPage() {
   const runnersWithParentPhone = runners?.filter((runner) => runner.parent_phone).length || 0;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(0,167,255,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(0,255,103,0.12),transparent_30%),linear-gradient(135deg,#0f172a_0%,#1e293b_48%,#0f172a_100%)] text-[#f8fafc]">
-      <header className="border-b border-slate-200 bg-white px-4 py-3 sticky top-0 z-50 shadow-sm sm:px-6 sm:py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
-            <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-              Hersemita
-            </h1>
-          </Link>
-          <div className="hidden items-center gap-3 sm:flex">
-            <Link href="/dashboard" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Dashboard
-            </Link>
-            <Link href="/groups" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Groups
-            </Link>
-            <Link href="/activities" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Activities
-            </Link>
-            <Link href="/runners/new" className="shrink-0 rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-4 py-2 text-sm font-bold text-white transition hover:shadow-lg hover:shadow-[#00a7ff]/20">
-              Add Runner
-            </Link>
-            <Link href="/settings" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Settings
-            </Link>
-          </div>
-          <CoachMobileMenu
-            links={[
-              { href: "/dashboard", label: "Dashboard" },
-              { href: "/groups", label: "Groups" },
-              { href: "/activities", label: "Activities" },
-              { href: "/runners/new", label: "Add Runner" },
-              { href: "/runners/message", label: "Message Parents" },
-              { href: "/settings", label: "Settings" },
-            ]}
-          />
-        </div>
-      </header>
+    <div className="min-h-screen hersemita-page-bg text-[#f8fafc]">
+      <CoachHeader active="runners" />
 
       <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
         <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between rounded-2xl border border-white/10 bg-white/10 p-6 shadow-2xl shadow-black/10 backdrop-blur">
@@ -253,7 +214,7 @@ export default async function RunnersPage() {
             <p className="mx-auto mt-3 max-w-md text-[#cbd5e1]">
               Add your first athlete to generate an upload access code and start collecting run screenshots.
             </p>
-            <Link href="/runners/new" className="mt-6 inline-flex rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-5 py-3 font-bold text-white transition hover:shadow-lg hover:shadow-[#00a7ff]/20">
+            <Link href="/runners/new" className="primary-action mt-6 inline-flex px-5 py-3">
               Add First Runner
             </Link>
           </div>

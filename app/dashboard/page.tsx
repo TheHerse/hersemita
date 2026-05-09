@@ -1,13 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
-import { UserButton } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import RunnerTrendChart from "@/components/RunnerTrendChart";
 import TeamOverviewChart from "@/components/TeamOverviewChart";
 import RunnerPerformanceTable from "@/components/RunnerPerformanceTable";
-import CoachMobileMenu from "@/components/CoachMobileMenu";
 import ActivityAppBadge from "@/components/ActivityAppBadge";
+import CoachHeader from "@/components/CoachHeader";
 
 type PaceTrend = 'improving' | 'declining' | 'stable';
 
@@ -187,50 +187,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen hersemita-page-bg">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-50 sm:px-6 sm:py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl overflow-hidden">
-            <img 
-              src="/logo.png" 
-              alt="Hersemita" 
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-            Hersemita
-          </h1>
-        </Link>
-        <div className="hidden items-center gap-3 sm:flex">
-          <Link href="/runners" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-            Runners
-          </Link>
-          <Link href="/groups" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-            Groups
-          </Link>
-          <Link href="/runners/message" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-            Message
-          </Link>
-          <Link href="/activities" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-            Activities
-          </Link>
-          <Link href="/settings" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-            Settings
-          </Link>
-          <UserButton afterSignOutUrl="/" />
-        </div>
-        <CoachMobileMenu
-          showUserButton
-          links={[
-            { href: "/runners", label: "Runners" },
-            { href: "/groups", label: "Groups" },
-            { href: "/runners/message", label: "Message Parents" },
-            { href: "/activities", label: "Activities" },
-            { href: "/settings", label: "Settings" },
-          ]}
-        />
-        </div>
-      </header>
+      <CoachHeader active="dashboard" />
 
       <main className="p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
@@ -245,7 +202,7 @@ export default async function DashboardPage() {
             </div>
             <Link 
               href="/runners/new" 
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-6 py-3 font-semibold text-white transition-all hover:shadow-lg hover:shadow-[#00a7ff]/20 sm:w-auto"
+              className="primary-action flex w-full items-center justify-center gap-2 px-6 py-3 sm:w-auto"
             >
               <span>+</span>
               <span>Add Runner</span>
@@ -253,9 +210,9 @@ export default async function DashboardPage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Link href="/runners" className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:border-[#00a7ff]/30 transition-all group">
+            <Link href="/runners" className="metric-card group p-6" style={{ "--metric-color": "#00a7ff" } as CSSProperties}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-[#00a7ff]/10 flex items-center justify-center">
+                <div className="metric-icon">
                   <svg className="w-5 h-5 text-[#00a7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
@@ -266,9 +223,9 @@ export default async function DashboardPage() {
               <p className="text-sm text-slate-500 mt-1">Total athletes</p>
             </Link>
             
-            <Link href="/activities" className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition hover:border-[#00ff67]/30 hover:shadow-md">
+            <Link href="/activities" className="metric-card p-6" style={{ "--metric-color": "#00ff67" } as CSSProperties}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-[#00ff67]/10 flex items-center justify-center">
+                <div className="metric-icon">
                   <svg className="w-5 h-5 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
@@ -279,9 +236,9 @@ export default async function DashboardPage() {
               <p className="text-sm text-slate-500 mt-1">All time</p>
             </Link>
             
-            <Link href="/activities" className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition hover:border-orange-400/40 hover:shadow-md">
+            <Link href="/activities" className="metric-card p-6" style={{ "--metric-color": "#f59e0b" } as CSSProperties}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                <div className="metric-icon">
                   <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -302,17 +259,20 @@ export default async function DashboardPage() {
             <RunnerTrendChart activities={recentActivities} />
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="section-card p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-[#00ff67]/10 flex items-center justify-center">
+              <div className="section-icon" style={{ "--icon-color": "#00ff67" } as CSSProperties}>
                 <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-slate-900">Quick Verify</h3>
+              <div>
+                <h3 className="text-xl font-semibold text-slate-900">Quick Verify</h3>
+                <p className="text-sm text-slate-500">Review the newest unverified activity uploads.</p>
+              </div>
             </div>
             {activities?.filter(a => !a.verified).length === 0 ? (
-              <div className="flex items-center gap-3 text-[#00ff67] bg-[#00ff67]/5 p-4 rounded-lg">
+              <div className="flex items-center gap-3 rounded-xl border border-[#00ff67]/20 bg-[#00ff67]/10 p-4 text-[#00ff67]">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
@@ -327,7 +287,7 @@ export default async function DashboardPage() {
                   const runner = activity.runners;
                   
                   return (
-                    <div key={activity.id} className="flex flex-col gap-3 py-3 border-b border-slate-100 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                    <div key={activity.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex-1">
                         <div className="font-medium text-slate-900">{runner.first_name} {runner.last_name}</div>
                         <div className="text-sm text-slate-600">
@@ -349,7 +309,7 @@ export default async function DashboardPage() {
                       <form action={verifyActivity.bind(null, activity.id)}>
                         <button 
                           type="submit" 
-                          className="w-full bg-[#00ff67] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#00e55c] transition-colors sm:w-auto"
+                          className="w-full rounded-lg bg-[#00d95a] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#00ff67]/20 transition-colors hover:bg-[#00c851] sm:w-auto"
                         >
                           Verify
                         </button>

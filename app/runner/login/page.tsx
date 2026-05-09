@@ -52,7 +52,7 @@ function LoginForm() {
               className="w-full h-full object-contain"
             />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
+          <h1 className="brand-wordmark text-3xl font-bold">
             Runner Portal
           </h1>
         </div>

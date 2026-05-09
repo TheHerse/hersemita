@@ -1,8 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { supabase } from "@/lib/supabase";
+import CoachHeader from "@/components/CoachHeader";
 
 async function deleteRunner(runnerId: string) {
   "use server";
@@ -76,22 +76,8 @@ export default async function DeleteRunnerPage({
     .eq("runner_id", runner.id);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(239,68,68,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(0,167,255,0.14),transparent_32%),linear-gradient(135deg,#0f172a_0%,#1e293b_48%,#0f172a_100%)] text-[#f8fafc]">
-      <header className="border-b border-slate-200 bg-white px-4 py-3 sticky top-0 z-50 shadow-sm sm:px-6 sm:py-4">
-        <div className="max-w-7xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
-              <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-              Hersemita
-            </h1>
-          </Link>
-          <Link href="/runners" className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-white/15 sm:w-auto">
-            &larr; Back to Runners
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-screen hersemita-page-bg text-[#f8fafc]">
+      <CoachHeader active="runners" />
 
       <main className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
         <div className="overflow-hidden rounded-2xl border border-red-500/30 bg-white/5 shadow-2xl shadow-black/20">

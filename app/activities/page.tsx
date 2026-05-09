@@ -1,10 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
-import { UserButton } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import ActivityAppBadge from "@/components/ActivityAppBadge";
-import CoachMobileMenu from "@/components/CoachMobileMenu";
+import CoachHeader from "@/components/CoachHeader";
 import DeleteActivityButton from "@/components/DeleteActivityButton";
 import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
@@ -84,36 +82,7 @@ export default async function ActivitiesPage() {
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
-      <header className="border-b border-slate-200 bg-white px-4 py-3 sticky top-0 z-50 shadow-sm sm:px-6 sm:py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
-              <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-              Hersemita
-            </h1>
-          </Link>
-
-          <div className="hidden items-center gap-3 sm:flex">
-            <Link href="/dashboard" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Dashboard</Link>
-            <Link href="/runners" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Runners</Link>
-            <Link href="/groups" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Groups</Link>
-            <Link href="/settings" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Settings</Link>
-            <UserButton afterSignOutUrl="/" />
-          </div>
-          <CoachMobileMenu
-            showUserButton
-            links={[
-              { href: "/dashboard", label: "Dashboard" },
-              { href: "/runners", label: "Runners" },
-              { href: "/groups", label: "Groups" },
-              { href: "/runners/message", label: "Message Parents" },
-              { href: "/settings", label: "Settings" },
-            ]}
-          />
-        </div>
-      </header>
+      <CoachHeader active="activities" />
 
       <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/10 p-5 shadow-2xl shadow-black/10 backdrop-blur sm:p-6">

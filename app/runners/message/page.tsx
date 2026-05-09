@@ -1,10 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image";
 import Link from "next/link";
 import { sendMassSMS } from "@/lib/twilio";
-import CoachMobileMenu from "@/components/CoachMobileMenu";
+import CoachHeader from "@/components/CoachHeader";
 
 async function sendMessage(formData: FormData) {
   "use server";
@@ -73,35 +72,7 @@ export default async function MessageParentsPage({
 
   return (
     <div className="min-h-screen hersemita-page-bg">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-50 sm:px-6 sm:py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
-            <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
-          </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-            Hersemita
-          </h1>
-        </Link>
-        <div className="hidden items-center gap-3 sm:flex">
-          <Link href="/dashboard" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Dashboard</Link>
-          <Link href="/runners" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Runners</Link>
-          <Link href="/groups" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Groups</Link>
-          <Link href="/activities" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Activities</Link>
-          <Link href="/settings" className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">Settings</Link>
-        </div>
-        <CoachMobileMenu
-          links={[
-            { href: "/dashboard", label: "Dashboard" },
-            { href: "/runners", label: "Runners" },
-            { href: "/groups", label: "Groups" },
-            { href: "/activities", label: "Activities" },
-            { href: "/runners/new", label: "Add Runner" },
-            { href: "/settings", label: "Settings" },
-          ]}
-        />
-        </div>
-      </header>
+      <CoachHeader active="message" />
 
       <main className="p-4 sm:p-6 lg:p-8">
         <div className="max-w-3xl mx-auto">

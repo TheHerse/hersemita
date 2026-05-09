@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs';
 import { dark } from '@clerk/themes';
+import ThemeToggle from "@/components/ThemeToggle";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,16 +33,24 @@ export default function RootLayout({
       afterSignInUrl="/dashboard"
       afterSignUpUrl="/dashboard"
     >
-      <html lang="en" className="dark">
+      <html lang="en" className="dark" suppressHydrationWarning>
+        <head>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `try{var t=localStorage.getItem('hersemita-theme');document.documentElement.classList.toggle('light',t==='light');document.documentElement.classList.toggle('dark',t!=='light');}catch(e){}`,
+            }}
+          />
+        </head>
         <body className={`${inter.className} bg-slate-900 text-slate-50 antialiased flex flex-col min-h-screen`}>
           <main className="flex-grow">
             {children}
           </main>
+          <ThemeToggle />
           
           <footer className="bg-slate-950 border-t border-slate-800 py-6 mt-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="text-center md:text-left">
-                <p className="text-sm text-slate-400">© 2026 Hersemita. All rights reserved.</p>
+                <p className="text-sm text-slate-400">&copy; 2026 Hersemita. All rights reserved.</p>
               </div>        
               <div className="flex items-center gap-6">
                 <a href="/privacy" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">

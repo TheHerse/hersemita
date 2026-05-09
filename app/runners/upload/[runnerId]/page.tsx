@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { supabase } from "@/lib/supabase";
 import { parseActivityFile } from "@/lib/parse-activity-file";
-import Image from "next/image";
-import Link from "next/link";
+import CoachHeader from "@/components/CoachHeader";
 
 interface Props {
   params: Promise<{
@@ -128,21 +127,7 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
 
   return (
     <div className="min-h-screen hersemita-page-bg">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-50 sm:px-6 sm:py-4">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
-            <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
-          </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-            Hersemita
-          </h1>
-        </Link>
-        <Link href="/runners" className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-white/15 sm:w-auto">
-          &larr; Back to Runners
-        </Link>
-        </div>
-      </header>
+      <CoachHeader active="runners" />
 
       <main className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/10 p-5 sm:p-6 shadow-2xl shadow-black/10 backdrop-blur">

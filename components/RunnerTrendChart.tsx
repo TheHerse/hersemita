@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useMemo } from "react";
 
 interface Activity {
@@ -44,22 +45,25 @@ export default function RunnerTrendChart({ activities }: { activities: Activity[
   const maxDistance = Math.max(...chartData.map(d => d.distance), 1);
 
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+    <div className="section-card p-4 sm:p-6">
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-8 h-8 rounded-lg bg-[#00ff67]/10 flex items-center justify-center">
+        <div className="section-icon" style={{ "--icon-color": "#00ff67" } as CSSProperties}>
           <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
         </div>
-        <h3 className="text-xl font-semibold text-slate-900">7-Day Activity Trend</h3>
+        <div>
+          <h3 className="text-xl font-semibold text-slate-900">7-Day Activity Trend</h3>
+          <p className="text-sm text-slate-500">Verified mileage across the latest training week.</p>
+        </div>
       </div>
 
       <div className="flex items-end justify-between h-40 gap-1.5 sm:h-48 sm:gap-2">
         {chartData.map((data) => (
           <div key={data.day} className="flex-1 flex flex-col items-center gap-2">
-            <div className="w-full bg-slate-100 rounded-t-lg relative overflow-hidden" style={{ height: '100%' }}>
+            <div className="w-full bg-slate-100 rounded-t-lg relative overflow-hidden border border-slate-200/60" style={{ height: '100%' }}>
               <div 
-                className="absolute bottom-0 w-full bg-gradient-to-t from-[#00a7ff] to-[#00ff67] transition-all duration-500 rounded-t-lg"
+                className="absolute bottom-0 w-full bg-gradient-to-t from-[#00a7ff] via-[#32d7d0] to-[#00ff67] transition-all duration-500 rounded-t-lg shadow-lg shadow-[#00a7ff]/15"
                 style={{ height: `${(data.distance / maxDistance) * 100}%` }}
               />
             </div>

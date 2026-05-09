@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 interface RunnerPerformance {
   runner_id: string;
   runner_name: string;
@@ -39,23 +41,26 @@ export default function RunnerPerformanceTable({ performances }: { performances:
   const getChangeColor = (change: number) => {
     if (change > 10) return 'text-[#00ff67]';
     if (change < -10) return 'text-red-500';
-    return 'text-slate-600';
+    return 'text-slate-500';
   };
 
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <div className="section-card overflow-hidden p-4 sm:p-6">
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00ff67] to-[#00a7ff] flex items-center justify-center">
-          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="section-icon" style={{ "--icon-color": "#00a7ff" } as CSSProperties}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
         </div>
-        <h3 className="text-xl font-semibold text-slate-900">Runner Performance</h3>
+        <div>
+          <h3 className="text-xl font-semibold text-slate-900">Runner Performance</h3>
+          <p className="text-sm text-slate-500">Pace, volume, and recent movement by athlete.</p>
+        </div>
       </div>
       
       <div className="space-y-3 md:hidden">
         {performances.map((perf) => (
-          <div key={perf.runner_id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+          <div key={perf.runner_id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="font-bold text-white">{perf.runner_name}</div>
@@ -93,7 +98,7 @@ export default function RunnerPerformanceTable({ performances }: { performances:
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200">
+            <tr className="border-b border-slate-200 bg-slate-50/60">
               <th className="text-left py-3 px-4 font-semibold text-slate-700">Runner</th>
               <th className="text-center py-3 px-4 font-semibold text-slate-700">Activities</th>
               <th className="text-center py-3 px-4 font-semibold text-slate-700">Total Distance</th>

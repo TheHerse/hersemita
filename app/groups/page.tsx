@@ -1,11 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
-import CoachMobileMenu from "@/components/CoachMobileMenu";
+import CoachHeader from "@/components/CoachHeader";
 
 const CUSTOM_GROUP_COLORS = [
   "#00a7ff",
@@ -178,22 +177,25 @@ export default async function GroupsPage({
 
   const params = await searchParams;
   const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners/new");
 
-  const { error: defaultGroupsError } = await ensureDefaultRunnerGroups(coachId);
+  const { error: defaultGroupsError } = coachId
+    ? await ensureDefaultRunnerGroups(coachId)
+    : { error: null };
 
-  const [{ data: groups, error: groupsError }, { data: runners }] = await Promise.all([
-    supabase
-      .from("runner_groups")
-      .select("id, name, color")
-      .eq("coach_id", coachId)
-      .order("name", { ascending: true }),
-    supabase
-      .from("runners")
-      .select("id, first_name, last_name, grade")
-      .eq("coach_id", coachId)
-      .order("last_name", { ascending: true }),
-  ]);
+  const [{ data: groups, error: groupsError }, { data: runners }] = coachId
+    ? await Promise.all([
+        supabase
+          .from("runner_groups")
+          .select("id, name, color")
+          .eq("coach_id", coachId)
+          .order("name", { ascending: true }),
+        supabase
+          .from("runners")
+          .select("id, first_name, last_name, grade")
+          .eq("coach_id", coachId)
+          .order("last_name", { ascending: true }),
+      ])
+    : [{ data: [], error: null }, { data: [] }];
 
   const safeGroups = (groups || []) as Group[];
   const automaticGroups = sortGroupsByNameOrder(
@@ -219,42 +221,7 @@ export default async function GroupsPage({
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
-      <header className="border-b border-slate-200 bg-white px-4 py-3 sticky top-0 z-50 shadow-sm sm:px-6 sm:py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
-              <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
-              Hersemita
-            </h1>
-          </Link>
-          <div className="hidden items-center gap-3 sm:flex">
-            <Link href="/dashboard" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Dashboard
-            </Link>
-            <Link href="/runners" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Runners
-            </Link>
-            <Link href="/activities" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Activities
-            </Link>
-            <Link href="/settings" className="shrink-0 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-[#00a7ff]/60 hover:text-[#00a7ff]">
-              Settings
-            </Link>
-          </div>
-          <CoachMobileMenu
-            links={[
-              { href: "/dashboard", label: "Dashboard" },
-              { href: "/runners", label: "Runners" },
-              { href: "/activities", label: "Activities" },
-              { href: "/runners/new", label: "Add Runner" },
-              { href: "/runners/message", label: "Message Parents" },
-              { href: "/settings", label: "Settings" },
-            ]}
-          />
-        </div>
-      </header>
+      <CoachHeader active="groups" />
 
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/10 p-5 sm:p-6 shadow-2xl shadow-black/10 backdrop-blur">
@@ -363,7 +330,7 @@ export default async function GroupsPage({
               {safeRunners.length === 0 ? (
                 <div className="p-8 text-center">
                   <p className="text-[#cbd5e1]">Add runners before assigning groups.</p>
-                  <Link href="/runners/new" className="mt-4 inline-flex rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-5 py-3 font-bold text-white">
+                  <Link href="/runners/new" className="primary-action mt-4 inline-flex px-5 py-3">
                     Add Runner
                   </Link>
                 </div>

@@ -219,7 +219,7 @@ export default function UploadPage() {
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Hersemita" className="w-10 h-10 object-contain" />
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">Hersemita</h1>
+              <h1 className="brand-wordmark text-2xl font-bold">Hersemita</h1>
               {runnerName && <p className="text-xs text-slate-500">Welcome, {runnerName}</p>}
             </div>
           </div>

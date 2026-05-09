@@ -17,14 +17,14 @@ export default function Home() {
               className="w-full h-full object-contain"
             />
           </div>
-          <h1 className="text-6xl font-bold tracking-tight bg-gradient-to-r from-[#00ff67] to-[#00a7ff] bg-clip-text text-transparent">
+          <h1 className="brand-wordmark text-6xl font-bold tracking-tight">
             Hersemita
           </h1>
         </div>
         
         <p className="text-xl text-slate-300 max-w-xl mx-auto leading-relaxed">
           Universal run tracking for cross country coaches. 
-          Athletes upload runs from Garmin, Apple Watch, or Strava—verify progress, analyze trends, and communicate with parents all in one place.
+          Athletes upload runs from Garmin, Apple Watch, or Strava - verify progress, analyze trends, and communicate with parents all in one place.
         </p>
         
         {/* Platform icons */}
@@ -61,7 +61,7 @@ export default function Home() {
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
           <Link 
             href="/sign-in"
-            className="group relative bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 inline-block text-center shadow-lg shadow-[#00a7ff]/25 hover:shadow-xl hover:shadow-[#00a7ff]/40 hover:scale-105"
+            className="auth-primary-action group relative bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 inline-block text-center shadow-lg shadow-[#00a7ff]/25 hover:shadow-xl hover:shadow-[#00a7ff]/40 hover:scale-105"
           >
             <span className="relative z-10 flex items-center justify-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

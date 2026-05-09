@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { UserButton } from "@clerk/nextjs";
+import CoachUserButton from "@/components/CoachUserButton";
 
 type CoachNavLink = {
   href: string;
   label: string;
+  active?: boolean;
 };
 
 export default function CoachMobileMenu({
@@ -37,24 +38,23 @@ export default function CoachMobileMenu({
       {open && (
         <div
           className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-xl border border-[#334155] shadow-2xl shadow-black/60"
-          style={{ backgroundColor: "#0f172a" }}
+          style={{ backgroundColor: "var(--surface)" }}
         >
-          <nav className="p-2" style={{ backgroundColor: "#0f172a" }}>
+          <nav className="p-2" style={{ backgroundColor: "var(--surface)" }}>
             {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="block rounded-lg px-4 py-3 text-sm font-bold text-white transition hover:bg-[#1e293b]"
-                style={{ backgroundColor: "#0f172a" }}
+                className={`block rounded-lg px-4 py-3 text-sm font-bold text-white transition hover:bg-[#1e293b] ${link.active ? "mobile-nav-active" : ""}`}
               >
                 {link.label}
               </Link>
             ))}
           </nav>
           {showUserButton && (
-            <div className="border-t border-[#334155] px-4 py-3" style={{ backgroundColor: "#0f172a" }}>
-              <UserButton afterSignOutUrl="/" />
+            <div className="border-t border-[#334155] px-4 py-3" style={{ backgroundColor: "var(--surface)" }}>
+              <CoachUserButton />
             </div>
           )}
         </div>
