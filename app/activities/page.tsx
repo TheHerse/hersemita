@@ -6,13 +6,14 @@ import CoachHeader from "@/components/CoachHeader";
 import DeleteActivityButton from "@/components/DeleteActivityButton";
 import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 async function verifyActivity(activityId: string) {
   "use server";
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: activity } = await supabase
     .from("activities")
@@ -38,6 +39,7 @@ async function deleteActivity(activityId: string) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: activity } = await supabase
     .from("activities")
@@ -57,6 +59,7 @@ async function deleteActivity(activityId: string) {
 export default async function ActivitiesPage() {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: coach } = await supabase
     .from("coaches")

@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import Link from "next/link";
 import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
 import CoachHeader from "@/components/CoachHeader";
@@ -8,6 +8,7 @@ import CoachHeader from "@/components/CoachHeader";
 export default async function RunnersPage() {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: coach } = await supabase
     .from("coaches")
@@ -16,7 +17,7 @@ export default async function RunnersPage() {
     .single();
 
   if (coach?.id) {
-    await ensureDefaultRunnerGroups(coach.id);
+    await ensureDefaultRunnerGroups(coach.id, supabase);
   }
 
   const { data: runners } = await supabase
@@ -58,12 +59,17 @@ export default async function RunnersPage() {
 
       <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
         <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between rounded-2xl border border-white/10 bg-white/10 p-6 shadow-2xl shadow-black/10 backdrop-blur">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">Roster Management</p>
             <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">My Runners</h2>
             <p className="mt-2 max-w-2xl text-[#cbd5e1]">
               Manage athlete access codes, parent contact info, uploads, and test runners from one place.
             </p>
+            {runners && runners.length > 0 && (
+              <Link href="/runners/new" className="primary-action mt-5 inline-flex px-5 py-3">
+                Add Runner
+              </Link>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:min-w-[420px]">
             <div className="rounded-xl border border-white/15 bg-white/10 p-4">

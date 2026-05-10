@@ -1,4 +1,7 @@
 import { supabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type RunnerDivision = "Boys" | "Girls" | "None / Other";
 
 export const DEFAULT_RUNNER_GROUPS = [
   { name: "9th", color: "#00a7ff" },
@@ -26,8 +29,8 @@ export function getSolidGroupStyle(color: string) {
   };
 }
 
-export async function ensureDefaultRunnerGroups(coachId: string) {
-  return supabase.from("runner_groups").upsert(
+export async function ensureDefaultRunnerGroups(coachId: string, client: SupabaseClient = supabase) {
+  return client.from("runner_groups").upsert(
     DEFAULT_RUNNER_GROUPS.map((group) => ({
       coach_id: coachId,
       name: group.name,
@@ -46,16 +49,18 @@ export async function syncRunnerAutomaticGroups({
   runnerId,
   grade,
   division,
+  client = supabase,
 }: {
   coachId: string;
   runnerId: string;
   grade: number;
-  division: "Boys" | "Girls";
+  division: RunnerDivision;
+  client?: SupabaseClient;
 }) {
-  await ensureDefaultRunnerGroups(coachId);
+  await ensureDefaultRunnerGroups(coachId, client);
 
   const automaticNames = DEFAULT_RUNNER_GROUP_NAMES;
-  const { data: automaticGroups } = await supabase
+  const { data: automaticGroups } = await client
     .from("runner_groups")
     .select("id, name")
     .eq("coach_id", coachId)
@@ -64,11 +69,11 @@ export async function syncRunnerAutomaticGroups({
   const automaticGroupIds = automaticGroups?.map((group) => group.id) || [];
   const desiredGroupIds =
     automaticGroups
-      ?.filter((group) => group.name === gradeGroupName(grade) || group.name === division)
+      ?.filter((group) => group.name === gradeGroupName(grade) || (division !== "None / Other" && group.name === division))
       .map((group) => group.id) || [];
 
   if (automaticGroupIds.length > 0) {
-    await supabase
+    await client
       .from("runner_group_members")
       .delete()
       .eq("runner_id", runnerId)
@@ -76,7 +81,7 @@ export async function syncRunnerAutomaticGroups({
   }
 
   if (desiredGroupIds.length > 0) {
-    await supabase.from("runner_group_members").insert(
+    await client.from("runner_group_members").insert(
       desiredGroupIds.map((groupId) => ({
         group_id: groupId,
         runner_id: runnerId,

@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
 import CoachHeader from "@/components/CoachHeader";
 
@@ -41,6 +41,7 @@ function sortGroupsByNameOrder(groups: Group[], order: string[]) {
 }
 
 async function getCoachId(userId: string) {
+  const supabase = await createServerSupabaseClient();
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
@@ -55,6 +56,7 @@ async function updateRunnerGroups(formData: FormData) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/groups");
@@ -111,11 +113,12 @@ async function createCustomGroup(formData: FormData) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/groups");
 
-  await ensureDefaultRunnerGroups(coachId);
+  await ensureDefaultRunnerGroups(coachId, supabase);
 
   const name = (formData.get("name") as string)?.trim();
   const color = (formData.get("color") as string) || CUSTOM_GROUP_COLORS[0];
@@ -143,6 +146,7 @@ async function deleteCustomGroup(groupId: string) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/groups");
@@ -174,12 +178,13 @@ export default async function GroupsPage({
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const params = await searchParams;
   const coachId = await getCoachId(userId);
 
   const { error: defaultGroupsError } = coachId
-    ? await ensureDefaultRunnerGroups(coachId)
+    ? await ensureDefaultRunnerGroups(coachId, supabase)
     : { error: null };
 
   const [{ data: groups, error: groupsError }, { data: runners }] = coachId

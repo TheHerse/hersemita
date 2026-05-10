@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
 
 async function saveCoachProfile(formData: FormData) {
@@ -8,6 +8,7 @@ async function saveCoachProfile(formData: FormData) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const name = (formData.get("name") as string)?.trim();
   const schoolName = (formData.get("schoolName") as string)?.trim();
@@ -51,6 +52,7 @@ export default async function CoachSettingsPage({
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const params = await searchParams;
 

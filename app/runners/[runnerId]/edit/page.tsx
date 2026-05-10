@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
@@ -25,6 +25,7 @@ function makeAccessCode() {
 }
 
 async function getCoachId(userId: string) {
+  const supabase = await createServerSupabaseClient();
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
@@ -39,6 +40,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/runners");
@@ -81,6 +83,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
     runnerId: runner.id,
     grade,
     division,
+    client: supabase,
   });
 
   const { data: allowedCustomGroups } = customGroupIds.length
@@ -126,6 +129,7 @@ async function rotateRunnerCode(runnerId: string) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/runners");
@@ -150,12 +154,13 @@ export default async function EditRunnerPage({
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { runnerId } = await params;
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/runners");
 
-  await ensureDefaultRunnerGroups(coachId);
+  await ensureDefaultRunnerGroups(coachId, supabase);
 
   const [{ data: runner }, { data: groups }] = await Promise.all([
     supabase

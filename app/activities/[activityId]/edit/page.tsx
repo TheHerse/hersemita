@@ -4,13 +4,14 @@ import ActivityAppBadge from "@/components/ActivityAppBadge";
 import CoachHeader from "@/components/CoachHeader";
 import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 async function updateActivity(activityId: string, formData: FormData) {
   "use server";
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: activity } = await supabase
     .from("activities")
@@ -49,6 +50,7 @@ export default async function EditActivityPage({
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { activityId } = await params;
 

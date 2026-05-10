@@ -1,21 +1,27 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import Link from "next/link";
 import { sendMassSMS } from "@/lib/twilio";
 import CoachHeader from "@/components/CoachHeader";
+import MessageParentsForm from "@/components/MessageParentsForm";
 
 async function sendMessage(formData: FormData) {
   "use server";
   
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
   
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name")
     .eq("email", userId)
-    .single();
+    .maybeSingle();
+
+  if (!coach?.id) {
+    redirect("/settings?error=Coach%20profile%20not%20found.");
+  }
 
   const { data: coachProfile } = coach?.id
     ? await supabase
@@ -28,15 +34,24 @@ async function sendMessage(formData: FormData) {
   const message = formData.get("message") as string;
   const messageType = formData.get("type") as string;
   const selectedRunners = formData.getAll("runners") as string[];
+
+  if (selectedRunners.length === 0) {
+    redirect("/runners/message?status=none");
+  }
   
   const { data: runners } = await supabase
     .from("runners")
     .select("first_name, last_name, parent_phone")
-    .eq("coach_id", coach?.id)
+    .eq("coach_id", coach.id)
     .in("id", selectedRunners)
     .not("parent_phone", "is", null);
   
   const phones = runners?.map(r => r.parent_phone!).filter(Boolean) || [];
+
+  if (phones.length === 0) {
+    redirect("/runners/message?status=none");
+  }
+
   const result = await sendMassSMS(
     phones,
     `${coachProfile?.school_name ? `${coachProfile.school_name} - ` : ""}Coach ${coach?.name || ""}: ${message}`.trim()
@@ -53,22 +68,26 @@ export default async function MessageParentsPage({
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
   const params = await searchParams;
 
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name")
     .eq("email", userId)
-    .single();
+    .maybeSingle();
 
-  const { data: runners } = await supabase
-    .from("runners")
-    .select("id, first_name, last_name, grade, parent_phone")
-    .eq("coach_id", coach?.id)
-    .order("last_name", { ascending: true });
+  const { data: runners } = coach?.id
+    ? await supabase
+        .from("runners")
+        .select("id, first_name, last_name, grade, parent_phone")
+        .eq("coach_id", coach.id)
+        .order("last_name", { ascending: true })
+    : { data: [] };
 
   const runnersWithPhone = runners?.filter(r => r.parent_phone) || [];
   const runnersWithoutPhone = runners?.filter(r => !r.parent_phone) || [];
+  const runnerCount = runners?.length || 0;
 
   return (
     <div className="min-h-screen hersemita-page-bg">
@@ -86,7 +105,7 @@ export default async function MessageParentsPage({
               <h1 className="text-2xl font-bold text-slate-900">Message Parents</h1>
             </div>
             <p className="text-slate-600 mb-6 sm:ml-11">
-              {runnersWithPhone.length} of {runners?.length || 0} runners have parent phone numbers
+              {runnersWithPhone.length} of {runnerCount} runners have parent phone numbers
             </p>
 
             {params?.status && (
@@ -100,90 +119,28 @@ export default async function MessageParentsPage({
                 {params.status === "sent" && `Sent ${params.count || 0} parent message${params.count === "1" ? "" : "s"}.`}
                 {params.status === "mock" && `Twilio is not fully configured yet. Hersemita prepared ${params.count || 0} message${params.count === "1" ? "" : "s"} but did not send live SMS.`}
                 {params.status === "error" && "Message sending failed. Check Twilio credentials, verification, and phone-number formatting."}
+                {params.status === "none" && "Choose at least one runner with a parent phone number before sending."}
               </div>
             )}
-            
-            <form action={sendMessage} className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Message Type</label>
-                <select name="type" className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#00a7ff] transition-colors bg-white">
-                  <option value="general">General Update</option>
-                  <option value="schedule">Schedule Change</option>
-                  <option value="weekly">Weekly Report</option>
-                  <option value="meet">Meet Day Info</option>
-                </select>
+
+            {!coach?.id ? (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+                Coach profile was not found. Visit settings once, save your profile, then return here.
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Select Runners</label>
-                <div className="border-2 border-slate-200 rounded-xl max-h-64 overflow-y-auto">
-                  <div className="sticky top-0 bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      id="select-all"
-                      className="rounded border-slate-300 text-[#00a7ff] focus:ring-[#00a7ff] select-all-checkbox w-4 h-4"
-                    />
-                    <label htmlFor="select-all" className="text-sm font-semibold text-slate-700 cursor-pointer">Select All</label>
-                  </div>
-                  
-                  {runnersWithPhone.map((runner) => (
-                    <div key={runner.id} className="px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 flex items-center gap-3 transition-colors">
-                      <input 
-                        type="checkbox" 
-                        name="runners" 
-                        value={runner.id}
-                        id={`runner-${runner.id}`}
-                        className="rounded border-slate-300 text-[#00a7ff] focus:ring-[#00a7ff] runner-checkbox w-4 h-4"
-                        defaultChecked
-                      />
-                      <label htmlFor={`runner-${runner.id}`} className="flex-1 cursor-pointer">
-                        <span className="font-medium text-slate-900">{runner.last_name}, {runner.first_name}</span>
-                        <span className="text-slate-500 text-sm ml-2">Grade {runner.grade}</span>
-                      </label>
-                    </div>
-                  ))}
-                  
-                  {runnersWithoutPhone.length > 0 && (
-                    <div className="px-4 py-3 bg-slate-50 border-t border-slate-200">
-                      <p className="text-xs text-slate-500 font-semibold mb-2">No parent phone on file:</p>
-                      {runnersWithoutPhone.map((runner) => (
-                        <div key={runner.id} className="py-1 text-sm text-slate-400 flex items-center gap-2">
-                          <input type="checkbox" disabled className="rounded opacity-50 w-4 h-4" />
-                          {runner.last_name}, {runner.first_name} (Grade {runner.grade})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Message</label>
-                <textarea 
-                  name="message" 
-                  required 
-                  maxLength={320}
-                  placeholder="Practice moved to 4pm today due to weather..."
-                  className="w-full p-4 border-2 border-slate-200 rounded-lg h-32 focus:outline-none focus:border-[#00a7ff] transition-colors resize-none"
-                />
-                <p className="text-xs text-slate-500 mt-1">320 character limit for SMS</p>
-              </div>
-              
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button 
-                  type="submit" 
-                  className="flex-1 bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white py-3 rounded-lg hover:shadow-lg hover:shadow-[#00a7ff]/25 transition-all font-bold"
-                >
-                  Send to Selected Parents
-                </button>
-                <Link 
-                  href="/dashboard" 
-                  className="px-6 py-3 border-2 border-slate-200 rounded-lg hover:bg-slate-50 font-semibold text-slate-700 transition-colors text-center"
-                >
-                  Cancel
+            ) : runnerCount === 0 ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center">
+                <p className="font-semibold text-slate-900">Add runners before messaging parents.</p>
+                <Link href="/runners/new" className="primary-action mt-4 inline-flex px-5 py-3">
+                  Add Runner
                 </Link>
               </div>
-            </form>
+            ) : (
+              <MessageParentsForm
+                action={sendMessage}
+                runnersWithPhone={runnersWithPhone}
+                runnersWithoutPhone={runnersWithoutPhone}
+              />
+            )}
             
             <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
               <p className="text-sm text-orange-800 flex items-center gap-2">
@@ -197,11 +154,6 @@ export default async function MessageParentsPage({
         </div>
       </main>
       
-      <script dangerouslySetInnerHTML={{ __html: `
-        document.getElementById('select-all').addEventListener('change', function() {
-          document.querySelectorAll('.runner-checkbox').forEach(cb => cb.checked = this.checked);
-        });
-      `}} />
     </div>
   );
 }

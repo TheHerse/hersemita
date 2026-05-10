@@ -1,10 +1,15 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
-import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, syncRunnerAutomaticGroups } from "@/lib/runner-groups";
+import {
+  DEFAULT_RUNNER_GROUP_NAMES,
+  ensureDefaultRunnerGroups,
+  syncRunnerAutomaticGroups,
+  type RunnerDivision,
+} from "@/lib/runner-groups";
 
 function groupColorVar(color: string) {
   return { "--group-color": color } as CSSProperties;
@@ -16,6 +21,7 @@ export default async function NewRunnerPage() {
   if (!userId) {
     redirect("/");
   }
+  const supabase = await createServerSupabaseClient();
 
   const { data: coach } = await supabase
     .from("coaches")
@@ -24,7 +30,7 @@ export default async function NewRunnerPage() {
     .single();
 
   if (coach?.id) {
-    await ensureDefaultRunnerGroups(coach.id);
+    await ensureDefaultRunnerGroups(coach.id, supabase);
   }
 
   const { data: groups } = coach?.id
@@ -42,11 +48,12 @@ export default async function NewRunnerPage() {
     
     const { userId } = await auth();
     if (!userId) redirect("/");
+    const supabase = await createServerSupabaseClient();
     
     const firstName = formData.get("firstName") as string;
     const lastName = formData.get("lastName") as string;
     const grade = parseInt(formData.get("grade") as string);
-    const division = formData.get("division") as "Boys" | "Girls";
+    const division = formData.get("division") as RunnerDivision;
     const parentPhone = formData.get("parentPhone") as string;
     const customGroupIds = formData.getAll("groups") as string[];
     
@@ -106,6 +113,7 @@ export default async function NewRunnerPage() {
         runnerId: newRunner.id,
         grade,
         division,
+        client: supabase,
       });
 
       const { data: extraGroups } = customGroupIds.length > 0
@@ -165,17 +173,23 @@ export default async function NewRunnerPage() {
 
             <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Division</label>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <label className="cursor-pointer">
                     <input type="radio" name="division" value="Boys" required className="sr-only peer" />
-                    <span className="flex items-center justify-center rounded-lg border-2 border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700 transition peer-checked:border-[#ef4444] peer-checked:bg-red-50 peer-checked:text-red-700">
+                    <span className="group-chip group-chip-striped flex items-center justify-center rounded-full border px-4 py-3 text-sm font-bold transition" style={groupColorVar("#ef4444")}>
                       Boys
                     </span>
                   </label>
                   <label className="cursor-pointer">
                     <input type="radio" name="division" value="Girls" required className="sr-only peer" />
-                    <span className="flex items-center justify-center rounded-lg border-2 border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700 transition peer-checked:border-[#14b8a6] peer-checked:bg-teal-50 peer-checked:text-teal-700">
+                    <span className="group-chip group-chip-striped flex items-center justify-center rounded-full border px-4 py-3 text-sm font-bold transition" style={groupColorVar("#14b8a6")}>
                       Girls
+                    </span>
+                  </label>
+                  <label className="cursor-pointer">
+                    <input type="radio" name="division" value="None / Other" required className="sr-only peer" />
+                    <span className="group-chip group-chip-solid flex items-center justify-center rounded-full border px-4 py-3 text-sm font-bold transition" style={groupColorVar("#64748b")}>
+                      None / Other
                     </span>
                   </label>
                 </div>
@@ -203,7 +217,7 @@ export default async function NewRunnerPage() {
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500 mt-2">Grade and Boys/Girls are assigned automatically. Select any extra coach-created groups here.</p>
+                <p className="text-xs text-slate-500 mt-2">Grade and selected division are assigned automatically. Select any extra coach-created groups here.</p>
               </div>
             )}
           

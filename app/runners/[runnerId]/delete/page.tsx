@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
 
 async function deleteRunner(runnerId: string) {
@@ -9,6 +9,7 @@ async function deleteRunner(runnerId: string) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: coach } = await supabase
     .from("coaches")
@@ -50,6 +51,7 @@ export default async function DeleteRunnerPage({
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { runnerId } = await params;
 

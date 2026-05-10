@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import RunnerTrendChart from "@/components/RunnerTrendChart";
@@ -16,6 +16,7 @@ async function verifyActivity(activityId: string) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
   
   const { data: activity } = await supabase
     .from("activities")
@@ -39,6 +40,7 @@ async function verifyActivity(activityId: string) {
 export default async function DashboardPage() {
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const supabase = await createServerSupabaseClient();
 
   const { data: coach } = await supabase
     .from("coaches")
