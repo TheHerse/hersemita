@@ -15,16 +15,22 @@ export default function RunnerUploadSuccessPage() {
         </p>
         <div className="mt-7 grid gap-3">
           <Link
-            href="/runner/upload"
+            href="/runner/dashboard"
             className="rounded-xl bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-4 py-3 font-bold text-white transition hover:shadow-lg hover:shadow-[#00a7ff]/20"
+          >
+            View My Analytics
+          </Link>
+          <Link
+            href="/runner/upload"
+            className="rounded-xl border border-slate-700 px-4 py-3 font-semibold text-slate-200 transition hover:border-[#00a7ff] hover:text-white"
           >
             Upload Another Run
           </Link>
           <Link
-            href="/"
+            href="/runner/calendar"
             className="rounded-xl border border-slate-700 px-4 py-3 font-semibold text-slate-200 transition hover:border-[#00a7ff] hover:text-white"
           >
-            Back to Hersemita
+            View Calendar
           </Link>
         </div>
       </main>

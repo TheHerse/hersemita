@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
+import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
@@ -57,7 +58,8 @@ export default async function NewRunnerPage() {
     const parentPhone = formData.get("parentPhone") as string;
     const customGroupIds = formData.getAll("groups") as string[];
     
-    const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const accessCode = makeAccessCode();
+    const username = makeRunnerUsername(firstName, lastName);
     
     const { data: coachData, error: coachError } = await supabase
       .from("coaches")
@@ -98,6 +100,7 @@ export default async function NewRunnerPage() {
         grade,
         parent_phone: parentPhone,
         access_code: accessCode,
+        username,
       })
       .select("id")
       .single();

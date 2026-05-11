@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
@@ -18,10 +19,6 @@ type Group = {
 
 function groupColorVar(color: string) {
   return { "--group-color": color } as CSSProperties;
-}
-
-function makeAccessCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 async function getCoachId(userId: string) {
@@ -124,7 +121,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
   redirect("/runners");
 }
 
-async function rotateRunnerCode(runnerId: string) {
+async function rotateRunnerCredentials(runnerId: string) {
   "use server";
 
   const { userId } = await auth();
@@ -134,9 +131,21 @@ async function rotateRunnerCode(runnerId: string) {
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/runners");
 
+  const { data: runner } = await supabase
+    .from("runners")
+    .select("first_name, last_name")
+    .eq("id", runnerId)
+    .eq("coach_id", coachId)
+    .single();
+
+  if (!runner) redirect("/runners");
+
   const { error } = await supabase
     .from("runners")
-    .update({ access_code: makeAccessCode() })
+    .update({
+      access_code: makeAccessCode(),
+      username: makeRunnerUsername(runner.first_name, runner.last_name),
+    })
     .eq("id", runnerId)
     .eq("coach_id", coachId);
 
@@ -165,7 +174,7 @@ export default async function EditRunnerPage({
   const [{ data: runner }, { data: groups }] = await Promise.all([
     supabase
       .from("runners")
-      .select("id, first_name, last_name, grade, parent_phone, access_code")
+      .select("id, first_name, last_name, grade, parent_phone, access_code, username")
       .eq("id", runnerId)
       .eq("coach_id", coachId)
       .single(),
@@ -273,12 +282,13 @@ export default async function EditRunnerPage({
         <div className="mt-6 rounded-xl border border-white/10 bg-white/10 p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="font-bold text-white">Runner Upload PIN</h3>
-              <p className="mt-1 text-sm text-[#cbd5e1]">Current code: <span className="font-mono font-bold text-[#7dd3fc]">{runner.access_code}</span></p>
+              <h3 className="font-bold text-white">Runner Upload Credentials</h3>
+              <p className="mt-1 text-sm text-[#cbd5e1]">Username: <span className="font-mono font-bold text-[#7dd3fc]">{runner.username || "Run the username SQL migration"}</span></p>
+              <p className="mt-1 text-sm text-[#cbd5e1]">Code: <span className="font-mono font-bold text-[#7dd3fc]">{runner.access_code}</span></p>
             </div>
-            <form action={rotateRunnerCode.bind(null, runner.id)}>
+            <form action={rotateRunnerCredentials.bind(null, runner.id)}>
               <button type="submit" className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600">
-                Rotate Code
+                Rotate Credentials
               </button>
             </form>
           </div>

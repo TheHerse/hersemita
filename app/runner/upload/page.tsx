@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { parseOCR } from '@/lib/ocr-parser';
+import RunnerPortalHeader from '@/components/RunnerPortalHeader';
 
 // Use the type from your ocr-parser file
 type ParsedRunData = {
@@ -38,6 +38,8 @@ export default function UploadPage() {
   const router = useRouter();
   const [runnerId, setRunnerId] = useState<string | null>(null);
   const [runnerName, setRunnerName] = useState('');
+  const [schoolName, setSchoolName] = useState('Your school');
+  const [coachName, setCoachName] = useState('Coach');
   const [screenshots, setScreenshots] = useState<File[]>([]);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,15 +58,31 @@ export default function UploadPage() {
   });
 
   useEffect(() => {
-    const id = localStorage.getItem('runner_id');
-    const name = localStorage.getItem('runner_name');
-    if (!id) {
-      router.push('/runner/login');
-      return;
+    let active = true;
+
+    async function loadSession() {
+      const response = await fetch('/api/runner-session');
+      const result = await response.json().catch(() => null) as {
+        runner?: { id: string; name: string; schoolName?: string; coachName?: string };
+      } | null;
+
+      if (!active) return;
+      if (!response.ok || !result?.runner) {
+        router.push('/runner/login');
+        return;
+      }
+
+      setRunnerId(result.runner.id);
+      setRunnerName(result.runner.name);
+      setSchoolName(result.runner.schoolName || 'Your school');
+      setCoachName(result.runner.coachName || 'Coach');
+      setLoading(false);
     }
-    setRunnerId(id);
-    setRunnerName(name || '');
-    setLoading(false);
+
+    loadSession();
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -98,21 +116,17 @@ export default function UploadPage() {
     
     let uploadedUrls: string[] = [];
     try {
-      // Upload to Supabase
-      const urls: string[] = [];
-      for (let i = 0; i < screenshots.length; i++) {
-        const file = screenshots[i];
-        const fileName = `${runnerId}/${Date.now()}_${i}.png`;
-        
-        const { error: upErr } = await supabase.storage
-          .from('activity-screenshots')
-          .upload(fileName, file);
-          
-        if (upErr) throw upErr;
-        
-        const { data } = supabase.storage.from('activity-screenshots').getPublicUrl(fileName);
-        urls.push(data.publicUrl);
+      const uploadData = new FormData();
+      screenshots.forEach((file) => uploadData.append('files', file));
+      const uploadResponse = await fetch('/api/runner-screenshots', {
+        method: 'POST',
+        body: uploadData,
+      });
+      const uploadResult = await uploadResponse.json().catch(() => null) as { urls?: string[]; error?: string } | null;
+      if (!uploadResponse.ok || !uploadResult?.urls?.length) {
+        throw new Error(uploadResult?.error || 'Failed to upload screenshots');
       }
+      const urls = uploadResult.urls;
       uploadedUrls = urls;
       setScreenshotUrls(urls);
 
@@ -181,26 +195,26 @@ export default function UploadPage() {
     }
 
     try {
-      const { error: insertError } = await supabase.from('activities').insert({
-        runner_id: runnerId,
-        garmin_activity_id: `manual_${Date.now()}`,
-        distance_miles: distance,
-        duration_seconds: durationSeconds,
-        pace_per_mile: paceSeconds,
-        start_time: new Date(formData.date).toISOString(),
-        verified: false,
-        uploaded_by: 'runner',
-        file_type: 'screenshot',
-        screenshot_urls: screenshotUrls,
-        detected_app: detectedApp || null,
-        raw_distance: rawValues.distance || null,
-        raw_pace: rawValues.pace || null,
-        notes: formData.notes || null,
+      const response = await fetch('/api/runner-activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenshotUrls,
+          distance,
+          durationSeconds,
+          paceSeconds,
+          date: formData.date,
+          detectedApp,
+          rawDistance: rawValues.distance,
+          rawPace: rawValues.pace,
+          notes: formData.notes,
+        }),
       });
 
-      if (insertError) {
-        const message = formatSupabaseError(insertError);
-        console.error('Insert error:', message, insertError);
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        const message = result?.error || 'Save failed';
+        console.error('Insert error:', message);
         throw new Error(message);
       }
       
@@ -214,18 +228,7 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen hersemita-page-bg">
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Hersemita" className="w-10 h-10 object-contain" />
-            <div>
-              <h1 className="brand-wordmark text-2xl font-bold">Hersemita</h1>
-              {runnerName && <p className="text-xs text-slate-500">Welcome, {runnerName}</p>}
-            </div>
-          </div>
-          <button onClick={() => { localStorage.clear(); router.push('/runner/login'); }} className="text-sm text-slate-600 hover:text-red-500">Logout</button>
-        </div>
-      </header>
+      <RunnerPortalHeader active="upload" runnerName={runnerName} schoolName={schoolName} coachName={coachName} />
 
       <main className="p-6 max-w-3xl mx-auto">
         <h2 className="text-3xl font-bold text-slate-900 mb-2 text-center">Upload Your Run</h2>

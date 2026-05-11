@@ -63,7 +63,7 @@ export default async function RunnersPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">Roster Management</p>
             <h2 className="mt-2 text-3xl font-bold text-white sm:text-4xl">My Runners</h2>
             <p className="mt-2 max-w-2xl text-[#cbd5e1]">
-              Manage athlete access codes, parent contact info, uploads, and test runners from one place.
+              Manage athlete upload credentials, parent contact info, uploads, and test runners from one place.
             </p>
             {runners && runners.length > 0 && (
               <Link href="/runners/new" className="primary-action mt-5 inline-flex px-5 py-3">
@@ -101,9 +101,10 @@ export default async function RunnersPage() {
                       <div className="font-bold text-white">{runner.first_name} {runner.last_name}</div>
                       <div className="mt-1 text-sm text-[#94a3b8]">Grade {runner.grade}</div>
                     </div>
-                    <span className="rounded-md border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-1 font-mono text-sm font-bold text-[#7dd3fc]">
-                      {runner.access_code}
-                    </span>
+                    <div className="text-right font-mono text-xs font-bold text-[#7dd3fc]">
+                      <div>{runner.username || "No username"}</div>
+                      <div>{runner.access_code}</div>
+                    </div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {(runnerGroups.get(runner.id) || []).map((group) => (
@@ -120,7 +121,7 @@ export default async function RunnersPage() {
                     <Link href={`/runners/upload/${runner.id}`} className="rounded-lg bg-[#008cff] px-3 py-2 text-center text-sm font-bold text-white shadow-sm shadow-[#008cff]/20 transition hover:bg-[#00a7ff]">
                       Upload
                     </Link>
-                    <Link href={`/runner/login?code=${runner.access_code}`} className="rounded-lg bg-[#00d95a] px-3 py-2 text-center text-sm font-bold text-white shadow-sm shadow-[#00d95a]/20 transition hover:bg-[#00ff67]">
+                    <Link href={`/runner/login?username=${encodeURIComponent(runner.username || "")}`} className="rounded-lg bg-[#00d95a] px-3 py-2 text-center text-sm font-bold text-white shadow-sm shadow-[#00d95a]/20 transition hover:bg-[#00ff67]">
                       Portal
                     </Link>
                     <Link href={`/runners/${runner.id}/edit`} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-center text-sm font-bold text-white transition hover:bg-white/15">
@@ -144,7 +145,7 @@ export default async function RunnersPage() {
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Runner</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Grade</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Groups</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Access Code</th>
+                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Upload Credentials</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Actions</th>
                 </tr>
               </thead>
@@ -176,9 +177,10 @@ export default async function RunnersPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="rounded-md border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-1 font-mono text-sm font-bold text-[#7dd3fc]">
-                        {runner.access_code}
-                      </span>
+                      <div className="inline-flex flex-col rounded-md border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-2 font-mono text-sm font-bold text-[#7dd3fc]">
+                        <span>{runner.username || "No username"}</span>
+                        <span>{runner.access_code}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-2">
@@ -186,7 +188,7 @@ export default async function RunnersPage() {
                           Upload Run
                         </Link>
                         <Link 
-                          href={`/runner/login?code=${runner.access_code}`} 
+                          href={`/runner/login?username=${encodeURIComponent(runner.username || "")}`} 
                           className="rounded-lg bg-[#00d95a] px-3 py-2 text-sm font-bold text-white shadow-sm shadow-[#00d95a]/20 transition hover:bg-[#00ff67] hover:shadow-md hover:shadow-[#00ff67]/25"
                         >
                           Portal Link
@@ -218,7 +220,7 @@ export default async function RunnersPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center shadow-2xl shadow-black/20">
             <h3 className="text-2xl font-bold text-white">No runners added yet</h3>
             <p className="mx-auto mt-3 max-w-md text-[#cbd5e1]">
-              Add your first athlete to generate an upload access code and start collecting run screenshots.
+              Add your first athlete to generate upload credentials and start collecting run screenshots.
             </p>
             <Link href="/runners/new" className="primary-action mt-6 inline-flex px-5 py-3">
               Add First Runner

@@ -2,37 +2,39 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 
 function LoginForm() {
   const searchParams = useSearchParams();
+  const [username, setUsername] = useState(searchParams.get("username") || "");
   const [code, setCode] = useState(searchParams.get("code") || "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const redirectTo = searchParams.get("redirect") || "/runner/upload";
+  const redirectTo = searchParams.get("redirect") || "/runner/dashboard";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const { data: runner, error: lookupError } = await supabase
-      .from("runners")
-      .select("id, first_name, last_name")
-      .eq("access_code", code)
-      .single();
+    const response = await fetch("/api/runner-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, code }),
+    });
 
-    if (lookupError || !runner) {
-      setError("Invalid access code");
+    const result = await response.json().catch(() => null) as {
+      runner?: { id: string; name: string };
+      error?: string;
+    } | null;
+
+    if (!response.ok || !result?.runner) {
+      setError(result?.error || "Invalid username or access code");
       setLoading(false);
       return;
     }
 
-    localStorage.setItem("runner_id", runner.id);
-    localStorage.setItem("runner_name", `${runner.first_name} ${runner.last_name}`);
-    
     router.push(redirectTo);
   };
 
@@ -58,6 +60,22 @@ function LoginForm() {
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Username
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoCapitalize="none"
+              autoComplete="username"
+              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-center text-lg font-bold text-slate-800 focus:outline-none focus:border-[#00a7ff] focus:ring-4 focus:ring-[#00a7ff]/10 transition-all"
+              placeholder="lastname_f1234"
+              required
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Enter your 6-digit access code
@@ -89,7 +107,7 @@ function LoginForm() {
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-500">
-          Ask your coach for your access code
+          Ask your coach for your username and access code
         </div>
       </div>
     </div>

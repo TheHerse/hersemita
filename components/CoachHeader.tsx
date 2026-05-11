@@ -5,12 +5,14 @@ import Link from "next/link";
 import CoachMobileMenu from "@/components/CoachMobileMenu";
 import CoachUserButton from "@/components/CoachUserButton";
 
-type CoachNavKey = "dashboard" | "runners" | "groups" | "message" | "activities";
+type CoachNavKey = "dashboard" | "runners" | "groups" | "calendar" | "analytics" | "message" | "activities";
 
 const navLinks: Array<{ key: CoachNavKey; href: string; label: string }> = [
   { key: "dashboard", href: "/dashboard", label: "Dashboard" },
   { key: "runners", href: "/runners", label: "Runners" },
   { key: "groups", href: "/groups", label: "Groups" },
+  { key: "calendar", href: "/calendar", label: "Calendar" },
+  { key: "analytics", href: "/analytics", label: "Analytics" },
   { key: "message", href: "/runners/message", label: "Message" },
   { key: "activities", href: "/activities", label: "Activities" },
 ];
