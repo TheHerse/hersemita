@@ -22,7 +22,17 @@ export default function TermsOfService() {
 
           <section>
             <h2 className="text-xl font-semibold text-slate-100 mb-3">SMS Communication</h2>
-            <p>By providing a phone number, users consent to receive training verification notifications. Standard message and data rates may apply.</p>
+            <div className="space-y-3">
+              <p>
+                By providing your mobile phone number to your coach, you consent to receive manual SMS messages regarding practices, meets, check-ins, team updates, and weekly performance summaries.
+              </p>
+              <p>
+                <strong className="text-slate-100">Message and data rates may apply.</strong> Message frequency varies based on coach discretion, typically 1-5 messages per week.
+              </p>
+              <p>
+                To opt out at any time, reply <strong className="text-slate-100">STOP</strong>. For assistance, reply <strong className="text-slate-100">HELP</strong> or contact support@hersemita.com.
+              </p>
+            </div>
           </section>
 
           <section>
