@@ -9,6 +9,7 @@ import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
   syncRunnerAutomaticGroups,
+  type RunnerDivision,
 } from "@/lib/runner-groups";
 
 type Group = {
@@ -45,7 +46,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
   const firstName = (formData.get("firstName") as string)?.trim();
   const lastName = (formData.get("lastName") as string)?.trim();
   const grade = parseInt(formData.get("grade") as string);
-  const division = formData.get("division") as "Boys" | "Girls";
+  const division = formData.get("division") as RunnerDivision;
   const parentPhone = (formData.get("parentPhone") as string)?.trim();
   const customGroupIds = formData.getAll("groups") as string[];
 
@@ -199,7 +200,9 @@ export default async function EditRunnerPage({
     : { data: [] };
 
   const assigned = new Set(memberships?.map((membership) => membership.group_id) || []);
-  const division = safeGroups.find((group) => ["Boys", "Girls"].includes(group.name) && assigned.has(group.id))?.name;
+  const division =
+    (safeGroups.find((group) => ["Boys", "Girls"].includes(group.name) && assigned.has(group.id))?.name as RunnerDivision | undefined) ||
+    "None / Other";
 
   return (
     <div className="min-h-screen hersemita-page-bg">
@@ -238,15 +241,25 @@ export default async function EditRunnerPage({
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">Division</label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {(["Boys", "Girls"] as const).map((option) => (
-                <label key={option} className="cursor-pointer">
-                  <input type="radio" name="division" value={option} required defaultChecked={division === option} className="sr-only peer" />
-                  <span className="flex items-center justify-center rounded-lg border-2 border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700 transition peer-checked:border-[#00a7ff] peer-checked:bg-[#00a7ff]/10 peer-checked:text-white">
-                    {option}
-                  </span>
-                </label>
-              ))}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="cursor-pointer">
+                <input type="radio" name="division" value="Boys" required defaultChecked={division === "Boys"} className="sr-only peer" />
+                <span className="group-chip group-chip-striped flex items-center justify-center rounded-full border px-4 py-3 text-sm font-bold transition" style={groupColorVar("#ef4444")}>
+                  Boys
+                </span>
+              </label>
+              <label className="cursor-pointer">
+                <input type="radio" name="division" value="Girls" required defaultChecked={division === "Girls"} className="sr-only peer" />
+                <span className="group-chip group-chip-striped flex items-center justify-center rounded-full border px-4 py-3 text-sm font-bold transition" style={groupColorVar("#14b8a6")}>
+                  Girls
+                </span>
+              </label>
+              <label className="cursor-pointer">
+                <input type="radio" name="division" value="None / Other" required defaultChecked={division === "None / Other"} className="sr-only peer" />
+                <span className="group-chip group-chip-solid flex items-center justify-center rounded-full border px-4 py-3 text-sm font-bold transition" style={groupColorVar("#64748b")}>
+                  None / Other
+                </span>
+              </label>
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
 import CoachHeader from "@/components/CoachHeader";
+import GroupSaveButton from "@/components/GroupSaveButton";
 
 const CUSTOM_GROUP_COLORS = [
   "#00a7ff",
@@ -38,6 +39,15 @@ function groupColorVar(color: string) {
 
 function sortGroupsByNameOrder(groups: Group[], order: string[]) {
   return [...groups].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+}
+
+function groupSelectionSignature(assigned: Set<string>, gradeGroups: Group[], divisionGroups: Group[], customGroups: Group[]) {
+  const values = [
+    `grade:${gradeGroups.find((group) => assigned.has(group.id))?.id || ""}`,
+    `division:${divisionGroups.find((group) => assigned.has(group.id))?.id || ""}`,
+    ...customGroups.filter((group) => assigned.has(group.id)).map((group) => `group:${group.id}`),
+  ];
+  return values.sort().join("|");
 }
 
 async function getCoachId(userId: string) {
@@ -198,6 +208,7 @@ export default async function GroupsPage({
           .from("runners")
           .select("id, first_name, last_name, grade")
           .eq("coach_id", coachId)
+          .order("first_name", { ascending: true })
           .order("last_name", { ascending: true }),
       ])
     : [{ data: [], error: null }, { data: [] }];
@@ -350,6 +361,7 @@ export default async function GroupsPage({
                     automaticGroups.filter((group) => DIVISION_GROUP_ORDER.includes(group.name)),
                     DIVISION_GROUP_ORDER
                   );
+                  const initialSignature = groupSelectionSignature(assigned, gradeGroups, divisionGroups, customGroups);
 
                   return (
                     <form key={runner.id} action={updateRunnerGroups} className="p-5">
@@ -441,9 +453,7 @@ export default async function GroupsPage({
                           )}
                         </div>
 
-                        <button type="submit" className="w-full rounded-lg bg-[#008cff] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#00a7ff] xl:w-auto">
-                          Save Groups
-                        </button>
+                        <GroupSaveButton initialSignature={initialSignature} />
                       </div>
                     </form>
                   );

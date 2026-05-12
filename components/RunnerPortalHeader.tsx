@@ -43,9 +43,18 @@ export default function RunnerPortalHeader({
               </p>
             </div>
           </div>
-          <button type="button" onClick={logout} className="text-sm font-semibold text-slate-600 hover:text-red-500">
-            Logout
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+            >
+              Back
+            </button>
+            <button type="button" onClick={logout} className="text-sm font-semibold text-slate-600 hover:text-red-500">
+              Logout
+            </button>
+          </div>
         </div>
 
         <nav className="grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">

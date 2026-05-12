@@ -34,6 +34,7 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
   const router = useRouter();
   const { isLoaded, userId } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [entryMode, setEntryMode] = useState<"file" | "manual">("file");
   const [manualData, setManualData] = useState({
     distance: "",
     duration: "",
@@ -65,10 +66,35 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
   async function handleSubmit(formData: FormData) {
     const { runnerId } = await params;
     const file = formData.get("file") as File;
-    const fileType = file.name.split(".").pop()?.toLowerCase() || "unknown";
-    const isImage = file.type.startsWith("image/");
+    const hasFile = file && file.size > 0;
+    const fileType = hasFile ? file.name.split(".").pop()?.toLowerCase() || "unknown" : "manual";
+    const isImage = hasFile && file.type.startsWith("image/");
 
     try {
+      if (entryMode === "manual" || !hasFile) {
+        const distance = parseFloat(manualData.distance);
+        const durationSeconds = durationToSeconds(manualData.duration);
+        const paceSeconds = manualData.pace ? paceToSeconds(manualData.pace) : Math.round(durationSeconds / distance);
+
+        const { error } = await supabase.from("activities").insert({
+          runner_id: runnerId,
+          garmin_activity_id: `coach_manual_${Date.now()}`,
+          distance_miles: distance,
+          duration_seconds: durationSeconds,
+          pace_per_mile: paceSeconds,
+          start_time: new Date(manualData.date).toISOString(),
+          verified: false,
+          uploaded_by: "coach",
+          file_type: "manual",
+          original_filename: "Manual entry",
+          notes: manualData.notes || null,
+        });
+
+        if (error) throw error;
+        router.push("/runners");
+        return;
+      }
+
       if (isImage) {
         const fileName = `${runnerId}/coach_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
         const { error: uploadError } = await supabase.storage
@@ -130,6 +156,14 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
       <CoachHeader active="runners" />
 
       <main className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="mb-4 rounded-lg border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/15"
+        >
+          Back
+        </button>
+
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/10 p-5 sm:p-6 shadow-2xl shadow-black/10 backdrop-blur">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">Coach Upload</p>
           <h2 className="mt-2 text-3xl font-bold text-white">Upload Run Proof</h2>
@@ -137,22 +171,44 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
         </div>
         
         <form action={handleSubmit} className="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+          <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <button
+              type="button"
+              onClick={() => setEntryMode("file")}
+              className={`rounded-lg px-4 py-3 text-sm font-bold transition ${entryMode === "file" ? "bg-[#00a7ff] text-white" : "text-slate-700 hover:bg-white"}`}
+            >
+              Upload Proof
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEntryMode("manual");
+                setSelectedFile(null);
+              }}
+              className={`rounded-lg px-4 py-3 text-sm font-bold transition ${entryMode === "manual" ? "bg-[#00a7ff] text-white" : "text-slate-700 hover:bg-white"}`}
+            >
+              Manual Entry
+            </button>
+          </div>
+
+          {entryMode === "file" && (
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">Run Proof</label>
             <input
               name="file"
               type="file"
               accept="image/*,.fit,.gpx,.tcx"
-              required
+              required={entryMode === "file"}
               onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
               className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-[#00a7ff] transition-colors"
             />
             <p className="mt-2 text-xs text-slate-500">Screenshots require manual details below. GPX, FIT, and TCX files will be parsed automatically.</p>
           </div>
+          )}
 
-          {selectedFile?.type.startsWith("image/") && (
+          {(entryMode === "manual" || selectedFile?.type.startsWith("image/")) && (
             <div className="rounded-xl border border-[#00a7ff]/20 bg-[#00a7ff]/5 p-4 space-y-4">
-              <h3 className="font-bold text-white">Screenshot Details</h3>
+              <h3 className="font-bold text-slate-900">{entryMode === "manual" ? "Manual Run Details" : "Screenshot Details"}</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-sm font-bold mb-1">Distance (mi)</label>

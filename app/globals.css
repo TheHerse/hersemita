@@ -131,6 +131,42 @@ body {
   color: var(--foreground) !important;
 }
 
+.light [class*="bg-slate-800"],
+.light [class*="bg-slate-900"],
+.light [class*="bg-slate-950"],
+.light [class*="bg-gray-800"],
+.light [class*="bg-gray-900"],
+.light [class*="bg-[#111827]"],
+.light [class*="bg-[#0f172a]"],
+.light [class*="bg-[#07111f]"],
+.light [class*="bg-\\[\\#111827\\]"],
+.light [class*="bg-\\[\\#0f172a\\]"],
+.light [class*="bg-\\[\\#07111f\\]"] {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  color: var(--foreground) !important;
+}
+
+.light [class*="bg-slate-950/"],
+.light [class*="bg-slate-900/"],
+.light [class*="bg-slate-800/"] {
+  background-color: rgba(241, 249, 255, 0.78) !important;
+}
+
+.light [class*="border-slate-600"],
+.light [class*="border-slate-700"],
+.light [class*="border-slate-800"],
+.light [class*="border-gray-600"],
+.light [class*="border-gray-700"],
+.light [class*="border-gray-800"] {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-900:hover,
+.light .hover\:bg-white\/\[0\.04\]:hover {
+  background-color: rgba(0, 167, 255, 0.08) !important;
+}
+
 .light [class*="text-slate-200"],
 .light [class*="text-slate-300"],
 .light [class*="text-slate-400"],

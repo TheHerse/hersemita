@@ -24,6 +24,7 @@ export default async function RunnersPage() {
     .from("runners")
     .select("*")
     .eq("coach_id", coach?.id)
+    .order("first_name", { ascending: true })
     .order("last_name", { ascending: true });
 
   const { data: groups } = await supabase

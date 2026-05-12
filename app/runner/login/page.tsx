@@ -6,11 +6,11 @@ import Image from "next/image";
 
 function LoginForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [username, setUsername] = useState(searchParams.get("username") || "");
   const [code, setCode] = useState(searchParams.get("code") || "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const redirectTo = searchParams.get("redirect") || "/runner/dashboard";
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,6 +40,13 @@ function LoginForm() {
 
   return (
     <div className="min-h-screen hersemita-auth-bg flex items-center justify-center p-4 relative overflow-hidden">
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="absolute left-4 top-4 z-20 rounded-lg border border-white/20 bg-white/85 px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white hover:text-slate-950"
+      >
+        Back
+      </button>
       <div className="absolute top-20 left-20 w-72 h-72 bg-[#00ff67]/10 rounded-full blur-3xl" />
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#00a7ff]/10 rounded-full blur-3xl" />
       

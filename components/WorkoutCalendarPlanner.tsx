@@ -213,15 +213,19 @@ export default function WorkoutCalendarPlanner({
   const [assignments, setAssignments] = useState<CalendarAssignment[]>([]);
   const [form, setForm] = useState<WorkoutTemplate>(EMPTY_TEMPLATE);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(STARTER_TEMPLATES[0].id);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedDate, setSelectedDate] = useState(isoDate(new Date()));
   const [targetType, setTargetType] = useState<CalendarAssignment["targetType"]>("team");
   const [targetId, setTargetId] = useState("team");
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [libraryFilter, setLibraryFilter] = useState<WorkoutKind | "all">("all");
+  const [librarySearch, setLibrarySearch] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [templateError, setTemplateError] = useState("");
   const [showWorkoutDetails, setShowWorkoutDetails] = useState(false);
+  const [showCreateWorkoutForm, setShowCreateWorkoutForm] = useState(false);
   const [showMobileDayDetails, setShowMobileDayDetails] = useState(false);
+  const [dayWorkoutTool, setDayWorkoutTool] = useState<"create" | "library" | null>(null);
   const [calendarLoaded, setCalendarLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState("Loading calendar...");
 
@@ -251,7 +255,7 @@ export default function WorkoutCalendarPlanner({
           const normalized = normalizeCalendarData(localData || { templates: STARTER_TEMPLATES, assignments: [] });
           setTemplates(normalized.templates);
           setAssignments(normalized.assignments);
-          setSelectedTemplateId(normalized.templates[0]?.id || "");
+          setSelectedTemplateId("");
           setSyncStatus(remote?.error || "Run the calendar SQL, then refresh.");
           setCalendarLoaded(true);
           return;
@@ -264,7 +268,7 @@ export default function WorkoutCalendarPlanner({
 
         setTemplates(normalized.templates);
         setAssignments(normalized.assignments);
-        setSelectedTemplateId(normalized.templates[0]?.id || "");
+        setSelectedTemplateId("");
         setSyncStatus(hasRemoteData ? "Synced to student portal." : localData ? "Migrating saved browser calendar to Supabase..." : "Ready to sync calendar.");
         setCalendarLoaded(true);
       } catch {
@@ -272,7 +276,7 @@ export default function WorkoutCalendarPlanner({
         const normalized = normalizeCalendarData(localData || { templates: STARTER_TEMPLATES, assignments: [] });
         setTemplates(normalized.templates);
         setAssignments(normalized.assignments);
-        setSelectedTemplateId(normalized.templates[0]?.id || "");
+        setSelectedTemplateId("");
         setSyncStatus("Calendar is in browser fallback mode.");
         setCalendarLoaded(true);
       }
@@ -318,9 +322,13 @@ export default function WorkoutCalendarPlanner({
     return days;
   }, [calendarMonth]);
 
-  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || templates[0];
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
 
-  const filteredTemplates = templates.filter((template) => libraryFilter === "all" || template.kind === libraryFilter);
+  const filteredTemplates = templates.filter((template) => {
+    const matchesType = libraryFilter === "all" || template.kind === libraryFilter;
+    const matchesSearch = template.title.toLowerCase().includes(librarySearch.trim().toLowerCase());
+    return matchesType && matchesSearch;
+  });
 
   const monthlyMiles = useMemo(() => {
     return monthDays.reduce((sum, day) => {
@@ -358,11 +366,15 @@ export default function WorkoutCalendarPlanner({
   const effectiveTargetId = targetId || targetOptions[0]?.id || "team";
 
   function updateForm(key: keyof WorkoutTemplate, value: string | WorkoutKind | string[]) {
+    if (templateError) setTemplateError("");
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   function saveTemplate() {
-    if (!form.title.trim()) return;
+    if (!form.title.trim()) {
+      setTemplateError("Workout name is required before this workout can be saved.");
+      return;
+    }
     const nextTemplate: WorkoutTemplate = {
       ...form,
       id: editingId || crypto.randomUUID(),
@@ -374,6 +386,7 @@ export default function WorkoutCalendarPlanner({
       editingId ? current.map((template) => (template.id === editingId ? nextTemplate : template)) : [nextTemplate, ...current]
     );
     setSelectedTemplateId(nextTemplate.id);
+    setTemplateError("");
     setEditingId(null);
     setForm(EMPTY_TEMPLATE);
   }
@@ -381,6 +394,9 @@ export default function WorkoutCalendarPlanner({
   function editTemplate(template: WorkoutTemplate) {
     setEditingId(template.id);
     setForm(template);
+    setTemplateError("");
+    setShowCreateWorkoutForm(true);
+    setDayWorkoutTool("create");
   }
 
   function duplicateTemplate(template: WorkoutTemplate) {
@@ -391,17 +407,20 @@ export default function WorkoutCalendarPlanner({
       createdAt: new Date().toISOString(),
     };
     setTemplates((current) => [copy, ...current]);
-    setSelectedTemplateId(copy.id);
+    setSelectedTemplateId("");
   }
 
   function deleteTemplate(templateId: string) {
     setTemplates((current) => current.filter((template) => template.id !== templateId));
     setAssignments((current) => current.filter((assignment) => assignment.templateId !== templateId));
-    if (selectedTemplateId === templateId) setSelectedTemplateId(templates.find((template) => template.id !== templateId)?.id || "");
+    if (selectedTemplateId === templateId) setSelectedTemplateId("");
   }
 
   function assignWorkout() {
-    if (!selectedTemplate) return;
+    if (!selectedTemplate) {
+      setConfirmation("Choose an existing workout or create one before adding to the calendar.");
+      return;
+    }
     const option = targetOptions.find((item) => item.id === effectiveTargetId) || targetOptions[0];
     if (!option) return;
     const nextAssignment: CalendarAssignment = {
@@ -504,7 +523,9 @@ export default function WorkoutCalendarPlanner({
                       onClick={() => {
                         setSelectedDate(dateKey);
                         setCalendarMonth(new Date(day));
+                        setSelectedTemplateId("");
                         setConfirmation("");
+                        setDayWorkoutTool(null);
                         setShowMobileDayDetails(true);
                       }}
                       className={`min-h-[86px] border-b border-r border-slate-800 p-2 text-left transition sm:min-h-[122px] sm:p-3 lg:min-h-[15vh] ${
@@ -616,8 +637,22 @@ export default function WorkoutCalendarPlanner({
         </aside>
       </section>
 
-      <section className="hidden">
-        <div className="section-card order-3 p-4 sm:p-5 xl:order-1">
+      <div className="mb-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => {
+            setEditingId(null);
+            setForm(EMPTY_TEMPLATE);
+            setShowCreateWorkoutForm((current) => !current);
+          }}
+          className="primary-action w-full px-5 py-3 text-base sm:w-auto"
+        >
+          {showCreateWorkoutForm ? "Hide New Workout" : "Create New Workout"}
+        </button>
+      </div>
+
+      <section className="mb-6 grid gap-6">
+        <div className={showCreateWorkoutForm ? "section-card p-4 sm:p-5" : "hidden"}>
           <div className="mb-4">
             <h3 className="text-xl font-bold text-slate-900">{editingId ? "Edit Workout" : "Create Workout"}</h3>
             <p className="mt-1 text-sm text-slate-500">Start with the basics. Add full coaching notes only when you need them.</p>
@@ -692,89 +727,40 @@ export default function WorkoutCalendarPlanner({
                 </button>
               )}
             </div>
+            {templateError && (
+              <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm font-bold text-red-300">
+                {templateError}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="order-2 grid gap-6">
-          <div className="section-card p-4 sm:p-5">
-            <div className="mb-4">
-              <h3 className="text-xl font-bold text-slate-900">Assign to Calendar</h3>
-              <p className="mt-1 text-sm text-slate-500">Pick a workout, date, and who gets it.</p>
-            </div>
-
-            {selectedTemplate && (
-              <div className="mb-4 rounded-xl border border-[#00a7ff]/30 bg-[#00a7ff]/10 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-[#7dd3fc]">Selected Workout</p>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-bold text-white">{selectedTemplate.title}</p>
-                    <p className="text-sm text-slate-300">{typeMeta(selectedTemplate.kind).label} / {selectedTemplate.miles || "--"} mi / {selectedTemplate.pace || "pace open"}</p>
-                  </div>
-                  <p className="text-sm font-bold text-[#00ff67]">
-                    {new Date(`${selectedDate}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid gap-3 md:grid-cols-4">
-              <label className="md:col-span-1">
-                <span className="mb-2 block text-sm font-bold text-slate-300">Date</span>
-                <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="w-full rounded-lg px-3 py-3 text-sm" />
-              </label>
-              <label>
-                <span className="mb-2 block text-sm font-bold text-slate-300">Target</span>
-                <select
-                  value={targetType}
-                  onChange={(event) => {
-                    const next = event.target.value as CalendarAssignment["targetType"];
-                    setTargetType(next);
-                    setTargetId(next === "team" ? "team" : "");
-                    setConfirmation("");
-                  }}
-                  className="w-full rounded-lg px-3 py-3 text-sm"
-                >
-                  <option value="team">Team</option>
-                  <option value="group">Group</option>
-                  <option value="runner">Runner</option>
-                </select>
-              </label>
-              <label>
-                <span className="mb-2 block text-sm font-bold text-slate-300">Who</span>
-                <select value={effectiveTargetId} onChange={(event) => setTargetId(event.target.value)} className="w-full rounded-lg px-3 py-3 text-sm">
-                  {targetOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" onClick={assignWorkout} className="primary-action self-end px-4 py-3">
-                Add to Calendar
-              </button>
-            </div>
-
-            {confirmation && (
-              <div className="mt-4 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm font-bold text-[#86efac]">
-                {confirmation}
-              </div>
-            )}
-          </div>
-
+        <div className="grid gap-6">
           <div className="section-card p-4 sm:p-5">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Workout Library</h3>
                 <p className="mt-1 text-sm text-slate-500">Pick from old workouts, duplicate one, or edit the template.</p>
               </div>
-              <select
-                value={libraryFilter}
-                onChange={(event) => setLibraryFilter(event.target.value as WorkoutKind | "all")}
-                className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm font-bold text-slate-200"
-              >
-                <option value="all">All types</option>
-                {WORKOUT_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <input
+                  type="search"
+                  value={librarySearch}
+                  onChange={(event) => setLibrarySearch(event.target.value)}
+                  placeholder="Search workout name"
+                  className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm font-bold text-slate-200"
+                />
+                <select
+                  value={libraryFilter}
+                  onChange={(event) => setLibraryFilter(event.target.value as WorkoutKind | "all")}
+                  className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm font-bold text-slate-200"
+                >
+                  <option value="all">All types</option>
+                  {WORKOUT_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid gap-3 lg:grid-cols-2">
@@ -782,7 +768,7 @@ export default function WorkoutCalendarPlanner({
                 const meta = typeMeta(template.kind);
                 return (
                   <article key={template.id} className="rounded-xl border border-slate-700 bg-slate-900/35 p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    <div>
                       <div>
                         <span className="rounded-full px-3 py-1 text-xs font-bold text-white" style={{ backgroundColor: meta.color }}>
                           {meta.label}
@@ -790,20 +776,6 @@ export default function WorkoutCalendarPlanner({
                         <h4 className="mt-3 text-lg font-bold text-white">{template.title}</h4>
                         <p className="mt-1 text-sm text-slate-400">{template.miles || "No mileage"} mi / {template.pace || "Coach choice"}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedTemplateId(template.id);
-                          setConfirmation("");
-                        }}
-                        className={`rounded-lg px-3 py-2 text-sm font-bold transition ${
-                          selectedTemplateId === template.id
-                            ? "bg-[#00ff67] text-slate-950"
-                            : "border border-[#00a7ff]/30 bg-[#00a7ff]/10 text-[#7dd3fc] hover:bg-[#00a7ff]/20"
-                        }`}
-                      >
-                        {selectedTemplateId === template.id ? "Selected" : "Select"}
-                      </button>
                     </div>
                     <p className="mt-3 line-clamp-2 text-sm text-slate-300">{template.mainSet || template.notes || "No details yet."}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -850,69 +822,11 @@ export default function WorkoutCalendarPlanner({
               </button>
             </div>
 
-            <div className="rounded-xl border border-[#00a7ff]/30 bg-[#00a7ff]/10 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-[#7dd3fc]">Ready to Add</p>
-              <p className="mt-2 font-bold text-white">{selectedTemplate?.title || "Select a workout"}</p>
-              <p className="mt-1 text-sm text-slate-300">
-                {selectedTemplate
-                  ? `${typeMeta(selectedTemplate.kind).label} / ${selectedTemplate.miles || "--"} mi / ${selectedTemplate.pace || "pace open"}`
-                  : "Choose from the library below."}
-              </p>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-              <div className="mb-4">
-                <h4 className="text-lg font-bold text-white">Assign to Calendar</h4>
-                <p className="mt-1 text-sm text-slate-400">Pick who gets the selected workout for this day.</p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-4">
-                <label className="md:col-span-1">
-                  <span className="mb-2 block text-sm font-bold text-slate-300">Date</span>
-                  <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="w-full rounded-lg px-3 py-3 text-sm" />
-                </label>
-                <label>
-                  <span className="mb-2 block text-sm font-bold text-slate-300">Target</span>
-                  <select
-                    value={targetType}
-                    onChange={(event) => {
-                      const next = event.target.value as CalendarAssignment["targetType"];
-                      setTargetType(next);
-                      setTargetId(next === "team" ? "team" : "");
-                      setConfirmation("");
-                    }}
-                    className="w-full rounded-lg px-3 py-3 text-sm"
-                  >
-                    <option value="team">Team</option>
-                    <option value="group">Group</option>
-                    <option value="runner">Runner</option>
-                  </select>
-                </label>
-                <label>
-                  <span className="mb-2 block text-sm font-bold text-slate-300">Who</span>
-                  <select value={effectiveTargetId} onChange={(event) => setTargetId(event.target.value)} className="w-full rounded-lg px-3 py-3 text-sm">
-                    {targetOptions.map((option) => (
-                      <option key={option.id} value={option.id}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" onClick={assignWorkout} className="primary-action self-end px-4 py-3">
-                  Add to Calendar
-                </button>
-              </div>
-
-              {confirmation && (
-                <div className="mt-4 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm font-bold text-[#86efac]">
-                  {confirmation}
-                </div>
-              )}
-            </div>
-
             <div className="mt-4 space-y-3">
               <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Workouts on this day</h4>
               {selectedDayAssignments.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-700 p-4 text-sm text-slate-500">
-                  Nothing planned yet. Close this view, pick a workout, and use Add to Calendar.
+                  Nothing planned yet. Pick a workout and use Add to Calendar.
                 </div>
               ) : (
                 selectedDayAssignments.map((assignment) => {
@@ -961,101 +875,210 @@ export default function WorkoutCalendarPlanner({
               )}
             </div>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-[380px_1fr]">
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-                <div className="mb-4">
-                  <h4 className="text-lg font-bold text-white">{editingId ? "Edit Workout" : "Create Workout"}</h4>
-                  <p className="mt-1 text-sm text-slate-400">Save it here, then select it from the library.</p>
-                </div>
+            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+              <div className="mb-4">
+                <h4 className="text-lg font-bold text-white">Assign to Calendar</h4>
+                <p className="mt-1 text-sm text-slate-400">Pick who gets the selected workout for this day.</p>
+              </div>
 
-                <div className="space-y-4">
-                  <TextInput label="Workout Name" value={form.title} onChange={(value) => updateForm("title", value)} placeholder="Varsity threshold day" />
-
-                  <div>
-                    <label className="mb-2 block text-sm font-bold text-slate-300">Type</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {WORKOUT_TYPES.map((type) => (
-                        <button
-                          key={type.value}
-                          type="button"
-                          onClick={() => updateForm("kind", type.value)}
-                          className={`rounded-lg border px-3 py-2 text-left text-sm font-bold transition ${
-                            form.kind === type.value ? "border-white text-white shadow-lg" : "border-slate-700 bg-slate-900/40 text-slate-300"
-                          }`}
-                          style={form.kind === type.value ? { backgroundColor: type.color } : undefined}
-                        >
-                          {type.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <TextInput label="Miles" value={form.miles} onChange={(value) => updateForm("miles", value)} placeholder="4-6" />
-                    <TextInput label="Pace" value={form.pace} onChange={(value) => updateForm("pace", value)} placeholder="7:00 or tempo" />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowWorkoutDetails((current) => !current)}
-                    className="w-full rounded-lg border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-4 py-3 text-sm font-bold text-[#7dd3fc] hover:bg-[#00a7ff]/20"
+              <div className="grid gap-3 md:grid-cols-4">
+                <label className="md:col-span-1">
+                  <span className="mb-2 block text-sm font-bold text-slate-300">Date</span>
+                  <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="w-full rounded-lg px-3 py-3 text-sm" />
+                </label>
+                <label>
+                  <span className="mb-2 block text-sm font-bold text-slate-300">Target</span>
+                  <select
+                    value={targetType}
+                    onChange={(event) => {
+                      const next = event.target.value as CalendarAssignment["targetType"];
+                      setTargetType(next);
+                      setTargetId(next === "team" ? "team" : "");
+                      setConfirmation("");
+                    }}
+                    className="w-full rounded-lg px-3 py-3 text-sm"
                   >
-                    {showWorkoutDetails ? "Hide full workout details" : "Add warmup, main set, strength, notes"}
-                  </button>
+                    <option value="team">Team</option>
+                    <option value="group">Group</option>
+                    <option value="runner">Runner</option>
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-2 block text-sm font-bold text-slate-300">Who</span>
+                  <select value={effectiveTargetId} onChange={(event) => setTargetId(event.target.value)} className="w-full rounded-lg px-3 py-3 text-sm">
+                    {targetOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={assignWorkout}
+                  disabled={!selectedTemplate}
+                  className="primary-action self-end px-4 py-3 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                >
+                  Add to Calendar
+                </button>
+              </div>
 
-                  {showWorkoutDetails && (
-                    <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-950/40 p-3">
-                      <TextInput label="Location" value={form.location} onChange={(value) => updateForm("location", value)} placeholder="Trails, track, field, gym" />
-                      <TextArea label="Warmup" value={form.warmup} onChange={(value) => updateForm("warmup", value)} placeholder="Jog, drills, strides" />
-                      <TextArea label="Main Set" value={form.mainSet} onChange={(value) => updateForm("mainSet", value)} placeholder="Workout details" />
-                      <TextArea label="Cooldown" value={form.cooldown} onChange={(value) => updateForm("cooldown", value)} placeholder="Easy jog, mobility" />
-                      <TextArea label="Strength or Gym" value={form.strength} onChange={(value) => updateForm("strength", value)} placeholder="Core, lifts, rehab, mobility" />
-                      <TextArea label="Coach Notes" value={form.notes} onChange={(value) => updateForm("notes", value)} placeholder="Adjustments, reminders, race-week notes" />
-                      <TextInput
-                        label="Tags"
-                        value={form.tags.join(", ")}
-                        onChange={(value) => updateForm("tags", value.split(",").map((tag) => tag.trim()))}
-                        placeholder="varsity, hills, recovery"
-                      />
+              <div className="mt-4 rounded-xl border border-[#00a7ff]/30 bg-[#00a7ff]/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-[#7dd3fc]">Ready to Add</p>
+                <p className="mt-2 font-bold text-white">{selectedTemplate?.title || "No workout selected"}</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  {selectedTemplate
+                    ? `${typeMeta(selectedTemplate.kind).label} / ${selectedTemplate.miles || "--"} mi / ${selectedTemplate.pace || "pace open"}`
+                    : "Choose an existing workout or create a new one before adding to the calendar."}
+                </p>
+              </div>
+
+              {confirmation && (
+                <div className="mt-4 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm font-bold text-[#86efac]">
+                  {confirmation}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 rounded-xl border border-slate-700 bg-slate-900/50 p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setForm(EMPTY_TEMPLATE);
+                    setDayWorkoutTool("create");
+                  }}
+                  className={`rounded-lg px-4 py-3 text-sm font-black transition ${
+                    dayWorkoutTool === "create"
+                      ? "bg-[#00ff67] text-slate-950"
+                      : "border border-[#00ff67]/30 bg-[#00ff67]/10 text-[#86efac] hover:bg-[#00ff67]/20"
+                  }`}
+                >
+                  Create New
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDayWorkoutTool("library")}
+                  className={`rounded-lg px-4 py-3 text-sm font-black transition ${
+                    dayWorkoutTool === "library"
+                      ? "bg-[#00a7ff] text-white"
+                      : "border border-[#00a7ff]/30 bg-[#00a7ff]/10 text-[#7dd3fc] hover:bg-[#00a7ff]/20"
+                  }`}
+                >
+                  Choose Existing
+                </button>
+              </div>
+
+              {dayWorkoutTool === "create" && (
+                <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950/40 p-4">
+                  <div className="mb-4">
+                    <h4 className="text-lg font-bold text-white">{editingId ? "Edit Workout" : "Create Workout"}</h4>
+                    <p className="mt-1 text-sm text-slate-400">Save it here, then choose it for this day.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <TextInput label="Workout Name" value={form.title} onChange={(value) => updateForm("title", value)} placeholder="Varsity threshold day" />
+
+                    <div>
+                      <label className="mb-2 block text-sm font-bold text-slate-300">Type</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {WORKOUT_TYPES.map((type) => (
+                          <button
+                            key={type.value}
+                            type="button"
+                            onClick={() => updateForm("kind", type.value)}
+                            className={`rounded-lg border px-3 py-2 text-left text-sm font-bold transition ${
+                              form.kind === type.value ? "border-white text-white shadow-lg" : "border-slate-700 bg-slate-900/40 text-slate-300"
+                            }`}
+                            style={form.kind === type.value ? { backgroundColor: type.color } : undefined}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
 
-                  <div className="flex gap-2">
-                    <button type="button" onClick={saveTemplate} className="primary-action flex-1 px-4 py-3">
-                      {editingId ? "Save Changes" : "Save Workout"}
+                    <div className="grid grid-cols-2 gap-3">
+                      <TextInput label="Miles" value={form.miles} onChange={(value) => updateForm("miles", value)} placeholder="4-6" />
+                      <TextInput label="Pace" value={form.pace} onChange={(value) => updateForm("pace", value)} placeholder="7:00 or tempo" />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowWorkoutDetails((current) => !current)}
+                      className="w-full rounded-lg border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-4 py-3 text-sm font-bold text-[#7dd3fc] hover:bg-[#00a7ff]/20"
+                    >
+                      {showWorkoutDetails ? "Hide full workout details" : "Add warmup, main set, strength, notes"}
                     </button>
-                    {editingId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingId(null);
-                          setForm(EMPTY_TEMPLATE);
-                        }}
-                        className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800"
-                      >
-                        Cancel
+
+                    {showWorkoutDetails && (
+                      <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-950/40 p-3">
+                        <TextInput label="Location" value={form.location} onChange={(value) => updateForm("location", value)} placeholder="Trails, track, field, gym" />
+                        <TextArea label="Warmup" value={form.warmup} onChange={(value) => updateForm("warmup", value)} placeholder="Jog, drills, strides" />
+                        <TextArea label="Main Set" value={form.mainSet} onChange={(value) => updateForm("mainSet", value)} placeholder="Workout details" />
+                        <TextArea label="Cooldown" value={form.cooldown} onChange={(value) => updateForm("cooldown", value)} placeholder="Easy jog, mobility" />
+                        <TextArea label="Strength or Gym" value={form.strength} onChange={(value) => updateForm("strength", value)} placeholder="Core, lifts, rehab, mobility" />
+                        <TextArea label="Coach Notes" value={form.notes} onChange={(value) => updateForm("notes", value)} placeholder="Adjustments, reminders, race-week notes" />
+                        <TextInput
+                          label="Tags"
+                          value={form.tags.join(", ")}
+                          onChange={(value) => updateForm("tags", value.split(",").map((tag) => tag.trim()))}
+                          placeholder="varsity, hills, recovery"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button type="button" onClick={saveTemplate} className="primary-action flex-1 px-4 py-3">
+                        {editingId ? "Save Changes" : "Save Workout"}
                       </button>
+                      {editingId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingId(null);
+                            setForm(EMPTY_TEMPLATE);
+                          }}
+                          className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                    {templateError && (
+                      <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm font-bold text-red-300">
+                        {templateError}
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
+              )}
 
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              {dayWorkoutTool === "library" && (
+                <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950/40 p-4">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h4 className="text-lg font-bold text-white">Workout Library</h4>
                     <p className="mt-1 text-sm text-slate-400">Select, edit, duplicate, or remove reusable workouts.</p>
                   </div>
-                  <select
-                    value={libraryFilter}
-                    onChange={(event) => setLibraryFilter(event.target.value as WorkoutKind | "all")}
-                    className="rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm font-bold text-slate-200"
-                  >
-                    <option value="all">All types</option>
-                    {WORKOUT_TYPES.map((type) => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <input
+                      type="search"
+                      value={librarySearch}
+                      onChange={(event) => setLibrarySearch(event.target.value)}
+                      placeholder="Search workout name"
+                      className="rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm font-bold text-slate-200"
+                    />
+                    <select
+                      value={libraryFilter}
+                      onChange={(event) => setLibraryFilter(event.target.value as WorkoutKind | "all")}
+                      className="rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm font-bold text-slate-200"
+                    >
+                      <option value="all">All types</option>
+                      {WORKOUT_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>{type.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="grid gap-3 xl:grid-cols-2">
@@ -1103,6 +1126,7 @@ export default function WorkoutCalendarPlanner({
                   })}
                 </div>
               </div>
+              )}
             </div>
 
             <button
