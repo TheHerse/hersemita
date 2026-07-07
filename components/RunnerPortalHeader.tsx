@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 type RunnerPortalHeaderProps = {
-  active: "dashboard" | "upload" | "calendar";
+  active: "dashboard" | "upload" | "recovery" | "calendar";
   runnerName: string;
   schoolName: string;
   coachName: string;
@@ -13,6 +13,7 @@ type RunnerPortalHeaderProps = {
 const navItems = [
   { key: "dashboard", href: "/runner/dashboard", label: "Analytics" },
   { key: "upload", href: "/runner/upload", label: "Upload" },
+  { key: "recovery", href: "/runner/recovery", label: "Check-In" },
   { key: "calendar", href: "/runner/calendar", label: "Calendar" },
 ] as const;
 
@@ -57,7 +58,7 @@ export default function RunnerPortalHeader({
           </div>
         </div>
 
-        <nav className="grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">
+        <nav className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 sm:grid-cols-4">
           {navItems.map((item) => (
             <Link
               key={item.key}

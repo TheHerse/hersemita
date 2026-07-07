@@ -201,8 +201,20 @@ export default async function NewRunnerPage() {
             <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Parent Phone Number</label>
                 <PhoneNumberInput name="parentPhone" placeholder="5551234567" />
-                <p className="text-xs text-slate-500 mt-1">Digits only. For SMS updates about run verification.</p>
+                <p className="text-xs text-slate-500 mt-1">Digits only. For SMS updates about practices, meets, runner check-ins, and training updates.</p>
             </div>
+
+            <label className="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="smsConsentConfirmed"
+                required
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-[#00a7ff] focus:ring-[#00a7ff]"
+              />
+              <span>
+                I confirm the parent or guardian provided this phone number and agreed to receive Hersemita SMS updates from this coach. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help.
+              </span>
+            </label>
 
             {customGroups.length > 0 && (
               <div>

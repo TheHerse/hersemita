@@ -8,8 +8,58 @@ import TeamOverviewChart from "@/components/TeamOverviewChart";
 import RunnerPerformanceTable from "@/components/RunnerPerformanceTable";
 import ActivityAppBadge from "@/components/ActivityAppBadge";
 import CoachHeader from "@/components/CoachHeader";
+import TrainingLoadRecoveryPanel from "@/components/TrainingLoadRecoveryPanel";
+import type { LoadRecoveryRow } from "@/components/TrainingLoadRecoveryPanel";
 
 type PaceTrend = 'improving' | 'declining' | 'stable';
+
+type WeeklyLoadRecord = {
+  runner_id: string;
+  week_start: string;
+  acute_load: number | string | null;
+  chronic_load: number | string | null;
+  acwr_ratio: number | string | null;
+  monotony: number | string | null;
+  strain: number | string | null;
+  status: string | null;
+};
+
+type RecoveryLogRecord = {
+  runner_id: string;
+  log_date: string;
+  hrv_ms: number | string | null;
+  hrv_status: string | null;
+  resting_hr: number | null;
+  sleep_score: number | null;
+  soreness: number | null;
+  illness: boolean | null;
+};
+
+type CoachAlertRecord = {
+  runner_id: string;
+  alert_type: string;
+  severity: string;
+  dismissed: boolean | null;
+  created_at: string | null;
+};
+
+const ALERT_SEVERITY_RANK: Record<string, number> = {
+  critical: 3,
+  high: 2,
+  medium: 1,
+};
+
+function latestByDate<T extends Record<string, unknown>>(rows: T[] | null | undefined, dateKey: keyof T) {
+  const map = new Map<string, T>();
+  rows?.forEach((row) => {
+    const runnerId = String(row.runner_id || "");
+    const current = map.get(runnerId);
+    const rowTime = new Date(String(row[dateKey] || "")).getTime();
+    const currentTime = current ? new Date(String(current[dateKey] || "")).getTime() : 0;
+    if (!current || rowTime > currentTime) map.set(runnerId, row);
+  });
+  return map;
+}
 
 async function verifyActivity(activityId: string) {
   "use server";
@@ -76,6 +126,44 @@ export default async function DashboardPage() {
     .eq("runners.coach_id", coach?.id)
     .order("start_time", { ascending: false });
 
+  const [{ data: weeklyLoads }, { data: recoveryLogs }, { data: coachAlerts }] = coach?.id
+    ? await Promise.all([
+        supabase
+          .from("weekly_loads")
+          .select("runner_id, week_start, acute_load, chronic_load, acwr_ratio, monotony, strain, status, runners!inner(coach_id)")
+          .eq("runners.coach_id", coach.id)
+          .order("week_start", { ascending: false }),
+        supabase
+          .from("recovery_logs")
+          .select("runner_id, log_date, hrv_ms, hrv_status, resting_hr, sleep_score, soreness, illness, runners!inner(coach_id)")
+          .eq("runners.coach_id", coach.id)
+          .order("log_date", { ascending: false }),
+        supabase
+          .from("coach_alerts")
+          .select("runner_id, alert_type, severity, dismissed, created_at")
+          .eq("coach_id", coach.id)
+          .eq("dismissed", false)
+          .order("created_at", { ascending: false }),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
+
+  const weeklyLoadRows = (weeklyLoads || []) as WeeklyLoadRecord[];
+  const recoveryLogRows = (recoveryLogs || []) as RecoveryLogRecord[];
+  const coachAlertRows = (coachAlerts || []) as CoachAlertRecord[];
+
+  const latestWeeklyLoadByRunner = latestByDate(weeklyLoadRows, "week_start");
+  const latestRecoveryByRunner = latestByDate(recoveryLogRows, "log_date");
+  const alertsByRunner = new Map<string, { count: number; highestSeverity: string | null }>();
+  coachAlertRows.forEach((alert) => {
+    const current = alertsByRunner.get(alert.runner_id) || { count: 0, highestSeverity: null };
+    const currentRank = current.highestSeverity ? ALERT_SEVERITY_RANK[current.highestSeverity] || 0 : 0;
+    const nextRank = ALERT_SEVERITY_RANK[alert.severity] || 0;
+    alertsByRunner.set(alert.runner_id, {
+      count: current.count + 1,
+      highestSeverity: nextRank > currentRank ? alert.severity : current.highestSeverity,
+    });
+  });
+
   const runnerCount = runners?.length || 0;
   const activityCount = activities?.length || 0;
   const pendingCount = activities?.filter(a => !a.verified).length || 0;
@@ -113,6 +201,9 @@ export default async function DashboardPage() {
 
   const runnerPerformances = runners?.map(runner => {
     const runnerActivities = activities?.filter(a => a.runner_id === runner.id) || [];
+    const latestLoad = latestWeeklyLoadByRunner.get(runner.id);
+    const latestRecovery = latestRecoveryByRunner.get(runner.id);
+    const alerts = alertsByRunner.get(runner.id);
     
     if (runnerActivities.length === 0) {
       return {
@@ -127,7 +218,13 @@ export default async function DashboardPage() {
         last_7_days_distance: 0,
         previous_7_days_distance: 0,
         distance_change_percent: 0,
-        last_activity_date: ''
+        last_activity_date: '',
+        acwr_ratio: latestLoad?.acwr_ratio == null ? null : Number(latestLoad.acwr_ratio),
+        load_status: latestLoad?.status || null,
+        hrv_status: latestRecovery?.hrv_status || null,
+        recovery_date: latestRecovery?.log_date || null,
+        alert_count: alerts?.count || 0,
+        highest_alert_severity: alerts?.highestSeverity || null
       };
     }
 
@@ -183,7 +280,38 @@ export default async function DashboardPage() {
       last_7_days_distance: last7Distance,
       previous_7_days_distance: prev7Distance,
       distance_change_percent: distanceChange,
-      last_activity_date: sortedActivities[0]?.start_time || ''
+      last_activity_date: sortedActivities[0]?.start_time || '',
+      acwr_ratio: latestLoad?.acwr_ratio == null ? null : Number(latestLoad.acwr_ratio),
+      load_status: latestLoad?.status || null,
+      hrv_status: latestRecovery?.hrv_status || null,
+      recovery_date: latestRecovery?.log_date || null,
+      alert_count: alerts?.count || 0,
+      highest_alert_severity: alerts?.highestSeverity || null
+    };
+  }) || [];
+
+  const loadRecoveryRows: LoadRecoveryRow[] = runners?.map((runner) => {
+    const latestLoad = latestWeeklyLoadByRunner.get(runner.id);
+    const latestRecovery = latestRecoveryByRunner.get(runner.id);
+    const alerts = alertsByRunner.get(runner.id);
+
+    return {
+      runnerId: runner.id,
+      runnerName: `${runner.first_name} ${runner.last_name}`,
+      acuteLoad: latestLoad?.acute_load == null ? null : Number(latestLoad.acute_load),
+      chronicLoad: latestLoad?.chronic_load == null ? null : Number(latestLoad.chronic_load),
+      acwrRatio: latestLoad?.acwr_ratio == null ? null : Number(latestLoad.acwr_ratio),
+      loadStatus: latestLoad?.status || null,
+      monotony: latestLoad?.monotony == null ? null : Number(latestLoad.monotony),
+      strain: latestLoad?.strain == null ? null : Number(latestLoad.strain),
+      latestRecoveryDate: latestRecovery?.log_date || null,
+      hrvStatus: latestRecovery?.hrv_status || null,
+      hrvMs: latestRecovery?.hrv_ms == null ? null : Number(latestRecovery.hrv_ms),
+      sleepScore: latestRecovery?.sleep_score == null ? null : Number(latestRecovery.sleep_score),
+      soreness: latestRecovery?.soreness == null ? null : Number(latestRecovery.soreness),
+      illness: Boolean(latestRecovery?.illness),
+      alertCount: alerts?.count || 0,
+      highestAlertSeverity: alerts?.highestSeverity || null,
     };
   }) || [];
 
@@ -254,6 +382,10 @@ export default async function DashboardPage() {
 
           <div className="mb-8">
             <RunnerPerformanceTable performances={runnerPerformances} />
+          </div>
+
+          <div className="mb-8">
+            <TrainingLoadRecoveryPanel rows={loadRecoveryRows} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

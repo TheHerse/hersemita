@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function TermsOfService() {
   return (
     <div className="min-h-screen hersemita-page-bg py-12 px-4 sm:px-6 lg:px-8">
@@ -24,13 +26,20 @@ export default function TermsOfService() {
             <h2 className="text-xl font-semibold text-slate-100 mb-3">SMS Communication</h2>
             <div className="space-y-3">
               <p>
-                By providing your mobile phone number to your coach, you consent to receive manual SMS messages regarding practices, meets, check-ins, team updates, and weekly performance summaries.
+                Program name: Hersemita. By providing your mobile phone number to your coach and agreeing to receive Hersemita SMS updates, you consent to receive manual SMS messages regarding practices, meets, runner check-ins, team updates, training reminders, and weekly performance summaries.
               </p>
               <p>
                 <strong className="text-slate-100">Message and data rates may apply.</strong> Message frequency varies based on coach discretion, typically 1-5 messages per week.
               </p>
               <p>
                 To opt out at any time, reply <strong className="text-slate-100">STOP</strong>. For assistance, reply <strong className="text-slate-100">HELP</strong> or contact support@hersemita.com.
+              </p>
+              <p>
+                Review the{" "}
+                <Link href="/sms-consent" className="text-[#7dd3fc] underline">
+                  Hersemita SMS Consent Notice
+                </Link>
+                .
               </p>
             </div>
           </section>
@@ -40,7 +49,7 @@ export default function TermsOfService() {
             <p>Hersemita is not responsible for carrier delays or failed message delivery. Service availability depends on third-party integrations (Garmin, Twilio).</p>
           </section>
 
-          <p className="text-sm text-slate-500 mt-8 pt-8 border-t border-slate-700">Last updated: February 2026</p>
+          <p className="text-sm text-slate-500 mt-8 pt-8 border-t border-slate-700">Last updated: July 2026</p>
         </div>
       </div>
     </div>

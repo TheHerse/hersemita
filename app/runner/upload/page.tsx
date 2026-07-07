@@ -17,23 +17,6 @@ type ParsedRunData = {
   rawPace: string | null;
 };
 
-function formatSupabaseError(error: unknown) {
-  if (!error) return 'Unknown Supabase error';
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'object') {
-    const details = error as {
-      message?: string;
-      details?: string;
-      hint?: string;
-      code?: string;
-    };
-    return [details.message, details.details, details.hint, details.code && `Code: ${details.code}`]
-      .filter(Boolean)
-      .join(' | ') || JSON.stringify(error);
-  }
-  return String(error);
-}
-
 export default function UploadPage() {
   const router = useRouter();
   const [runnerId, setRunnerId] = useState<string | null>(null);
@@ -54,6 +37,14 @@ export default function UploadPage() {
     duration: '',
     pace: '',
     date: new Date().toISOString().split('T')[0],
+    workoutType: 'easy',
+    rpe: '',
+    soreness: '',
+    illness: false,
+    avgHr: '',
+    maxHr: '',
+    trainingLoad: '',
+    elevationGainM: '',
     notes: ''
   });
 
@@ -145,6 +136,14 @@ export default function UploadPage() {
           duration: parsed.duration || '',
           pace: parsed.pace || '',
           date: parsed.date || new Date().toISOString().split('T')[0],
+          workoutType: 'easy',
+          rpe: '',
+          soreness: '',
+          illness: false,
+          avgHr: '',
+          maxHr: '',
+          trainingLoad: '',
+          elevationGainM: '',
           notes: ''
         });
         
@@ -207,6 +206,14 @@ export default function UploadPage() {
           detectedApp,
           rawDistance: rawValues.distance,
           rawPace: rawValues.pace,
+          workoutType: formData.workoutType,
+          rpe: formData.rpe,
+          soreness: formData.soreness,
+          illness: formData.illness,
+          avgHr: formData.avgHr,
+          maxHr: formData.maxHr,
+          trainingLoad: formData.trainingLoad,
+          elevationGainM: formData.elevationGainM,
           notes: formData.notes,
         }),
       });
@@ -307,6 +314,49 @@ export default function UploadPage() {
                     Pace {rawValues.pace && <span className="text-slate-400 font-normal">(was {rawValues.pace})</span>}
                   </label>
                   <input type="text" value={formData.pace} onChange={e => setFormData({...formData, pace: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="8:32" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold mb-1">Workout Type</label>
+                  <select value={formData.workoutType} onChange={e => setFormData({...formData, workoutType: e.target.value})} className="w-full border rounded-lg px-3 py-2">
+                    <option value="easy">Easy</option>
+                    <option value="tempo">Tempo</option>
+                    <option value="interval">Interval</option>
+                    <option value="long">Long Run</option>
+                    <option value="race">Race</option>
+                    <option value="recovery">Recovery</option>
+                    <option value="cross">Cross Training</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Effort (RPE 1-10)</label>
+                  <input type="number" min="1" max="10" value={formData.rpe} onChange={e => setFormData({...formData, rpe: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="6" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Soreness (1-10)</label>
+                  <input type="number" min="1" max="10" value={formData.soreness} onChange={e => setFormData({...formData, soreness: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="3" />
+                </div>
+                <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+                  <input type="checkbox" checked={formData.illness} onChange={e => setFormData({...formData, illness: e.target.checked})} className="h-4 w-4" />
+                  Sick today
+                </label>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Avg HR</label>
+                  <input type="number" min="1" max="250" value={formData.avgHr} onChange={e => setFormData({...formData, avgHr: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Max HR</label>
+                  <input type="number" min="1" max="250" value={formData.maxHr} onChange={e => setFormData({...formData, maxHr: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Garmin Load</label>
+                  <input type="number" min="0" step="0.01" value={formData.trainingLoad} onChange={e => setFormData({...formData, trainingLoad: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Elevation Gain (m)</label>
+                  <input type="number" min="0" value={formData.elevationGainM} onChange={e => setFormData({...formData, elevationGainM: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
                 </div>
               </div>
 

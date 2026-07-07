@@ -6,6 +6,18 @@ import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
+function nullableNumber(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function workoutTypeValue(value: FormDataEntryValue | null) {
+  if (typeof value !== "string") return null;
+  const allowed = new Set(["easy", "tempo", "interval", "long", "race", "recovery", "cross"]);
+  return allowed.has(value) ? value : null;
+}
+
 async function updateActivity(activityId: string, formData: FormData) {
   "use server";
 
@@ -15,7 +27,7 @@ async function updateActivity(activityId: string, formData: FormData) {
 
   const { data: activity } = await supabase
     .from("activities")
-    .select("id, runners!inner(coach_id, coaches!inner(email))")
+    .select("id, duration_seconds, runners!inner(coach_id, coaches!inner(email))")
     .eq("id", activityId)
     .eq("runners.coaches.email", userId)
     .single();
@@ -27,6 +39,9 @@ async function updateActivity(activityId: string, formData: FormData) {
   const paceSeconds = parseInt(formData.get("paceSeconds") as string) || 0;
   const notes = (formData.get("notes") as string)?.trim();
   const verified = formData.get("verified") === "on";
+  const rpe = nullableNumber(formData.get("rpe"));
+  const manualLoad = nullableNumber(formData.get("trainingLoad"));
+  const estimatedLoad = manualLoad == null && rpe != null ? (Number(activity.duration_seconds || 0) / 60) * rpe * 0.6 : null;
 
   const { error } = await supabase
     .from("activities")
@@ -35,6 +50,15 @@ async function updateActivity(activityId: string, formData: FormData) {
       pace_per_mile: paceMinutes * 60 + paceSeconds,
       notes: notes || null,
       verified,
+      workout_type: workoutTypeValue(formData.get("workoutType")),
+      avg_hr: nullableNumber(formData.get("avgHr")),
+      max_hr: nullableNumber(formData.get("maxHr")),
+      rpe,
+      soreness: nullableNumber(formData.get("soreness")),
+      illness: formData.get("illness") === "on",
+      training_load: manualLoad ?? estimatedLoad,
+      training_load_source: manualLoad != null ? "manual" : estimatedLoad != null ? "estimated_rpe" : "manual",
+      elevation_gain_m: nullableNumber(formData.get("elevationGainM")),
     })
     .eq("id", activity.id);
 
@@ -138,6 +162,94 @@ export default async function EditActivityPage({
               rows={4}
               className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
             />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Workout Type</label>
+              <select
+                name="workoutType"
+                defaultValue={activity.workout_type || "easy"}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              >
+                <option value="easy">Easy</option>
+                <option value="tempo">Tempo</option>
+                <option value="interval">Interval</option>
+                <option value="long">Long Run</option>
+                <option value="race">Race</option>
+                <option value="recovery">Recovery</option>
+                <option value="cross">Cross Training</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Effort (RPE 1-10)</label>
+              <input
+                name="rpe"
+                type="number"
+                min="1"
+                max="10"
+                defaultValue={activity.rpe || ""}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Soreness (1-10)</label>
+              <input
+                name="soreness"
+                type="number"
+                min="1"
+                max="10"
+                defaultValue={activity.soreness || ""}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              />
+            </div>
+            <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
+              <input name="illness" type="checkbox" defaultChecked={activity.illness} className="h-5 w-5" />
+              <span className="font-bold">Sick today</span>
+            </label>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Avg HR</label>
+              <input
+                name="avgHr"
+                type="number"
+                min="1"
+                max="250"
+                defaultValue={activity.avg_hr || ""}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Max HR</label>
+              <input
+                name="maxHr"
+                type="number"
+                min="1"
+                max="250"
+                defaultValue={activity.max_hr || ""}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Garmin Load</label>
+              <input
+                name="trainingLoad"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={activity.training_load || ""}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Elevation Gain (m)</label>
+              <input
+                name="elevationGainM"
+                type="number"
+                min="0"
+                defaultValue={activity.elevation_gain_m || ""}
+                className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+              />
+            </div>
           </div>
 
           <label className="flex items-center gap-3 rounded-xl border border-slate-700 bg-[#111827] p-4">

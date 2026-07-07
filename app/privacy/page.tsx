@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen hersemita-page-bg py-12 px-4 sm:px-6 lg:px-8">
@@ -14,7 +16,7 @@ export default function PrivacyPolicy() {
           <div className="space-y-6 text-slate-300 leading-relaxed">
             <section>
               <h2 className="text-xl font-semibold text-slate-100 mb-3">Information We Collect</h2>
-              <p>Hersemita collects phone numbers and athlete training data solely to provide workout verification notifications to parents and guardians of cross country athletes.</p>
+              <p>Hersemita collects phone numbers and athlete training data solely to provide workout verification, team, practice, meet, runner check-in, and training-related updates to parents and guardians of cross country and track athletes.</p>
             </section>
 
             <section>
@@ -28,12 +30,19 @@ export default function PrivacyPolicy() {
 
             <section>
               <h2 className="text-xl font-semibold text-slate-100 mb-3">Data Protection</h2>
-              <p>We maintain FERPA-compliant confidential records. Phone numbers are never shared with third parties or used for marketing purposes.</p>
+              <p>We maintain confidential student and team records. Phone numbers are not sold, shared with third parties for marketing, or used for unrelated marketing purposes.</p>
             </section>
 
             <section>
               <h2 className="text-xl font-semibold text-slate-100 mb-3">SMS Terms</h2>
-              <p>Message and data rates may apply. Reply STOP to opt out at any time. Reply HELP for assistance.</p>
+              <p>Parents and guardians opt in by providing their mobile phone number to their child&apos;s coach and agreeing to receive Hersemita SMS updates. Message frequency varies. Message and data rates may apply. Reply STOP to opt out at any time. Reply HELP for assistance.</p>
+              <p className="mt-3">
+                View the full{" "}
+                <Link href="/sms-consent" className="text-[#7dd3fc] underline">
+                  Hersemita SMS Consent Notice
+                </Link>
+                .
+              </p>
             </section>
 
             <section>
@@ -42,7 +51,7 @@ export default function PrivacyPolicy() {
               <p>Location: Clarksville, TN</p>
             </section>
 
-            <p className="text-sm text-slate-500 mt-8 pt-8 border-t border-slate-700">Last updated: February 2026</p>
+            <p className="text-sm text-slate-500 mt-8 pt-8 border-t border-slate-700">Last updated: July 2026</p>
           </div>
         </div>
       </div>

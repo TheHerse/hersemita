@@ -12,6 +12,23 @@ function parseString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseBoolean(value: unknown) {
+  return value === true || value === "true" || value === "on";
+}
+
+function parseIntegerInRange(value: unknown, min: number, max: number) {
+  const parsed = parseNumber(value);
+  if (parsed == null) return null;
+  const rounded = Math.round(parsed);
+  return rounded >= min && rounded <= max ? rounded : null;
+}
+
+function parseWorkoutType(value: unknown) {
+  const parsed = parseString(value);
+  const allowed = new Set(["easy", "tempo", "interval", "long", "race", "recovery", "cross"]);
+  return allowed.has(parsed) ? parsed : null;
+}
+
 export async function POST(request: Request) {
   const session = await getRunnerSession();
   if (!session) {
@@ -26,6 +43,9 @@ export async function POST(request: Request) {
   const durationSeconds = parseNumber(body?.durationSeconds);
   const paceSeconds = parseNumber(body?.paceSeconds) || 0;
   const date = parseString(body?.date);
+  const rpe = parseIntegerInRange(body?.rpe, 1, 10);
+  const trainingLoadInput = parseNumber(body?.trainingLoad);
+  const trainingLoad = trainingLoadInput ?? (durationSeconds != null && rpe != null ? (durationSeconds / 60) * rpe * 0.6 : null);
 
   if (!screenshotUrls.length || distance == null || durationSeconds == null || !date) {
     return NextResponse.json({ error: "Missing run details" }, { status: 400 });
@@ -51,6 +71,15 @@ export async function POST(request: Request) {
     raw_distance: parseString(body?.rawDistance) || null,
     raw_pace: parseString(body?.rawPace) || null,
     notes: parseString(body?.notes) || null,
+    workout_type: parseWorkoutType(body?.workoutType),
+    avg_hr: parseIntegerInRange(body?.avgHr, 1, 250),
+    max_hr: parseIntegerInRange(body?.maxHr, 1, 250),
+    rpe,
+    training_load: trainingLoad,
+    training_load_source: trainingLoadInput != null ? "manual" : trainingLoad != null ? "estimated_rpe" : "manual",
+    elevation_gain_m: parseIntegerInRange(body?.elevationGainM, 0, 10000),
+    soreness: parseIntegerInRange(body?.soreness, 1, 10),
+    illness: parseBoolean(body?.illness),
   });
 
   if (error) {

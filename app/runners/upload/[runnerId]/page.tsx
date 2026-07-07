@@ -30,6 +30,39 @@ function formatSupabaseError(error: unknown) {
   return String(error);
 }
 
+function nullableNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && value.trim() !== "" ? parsed : null;
+}
+
+function buildTrainingFields(data: {
+  durationSeconds: number;
+  workoutType: string;
+  rpe: string;
+  soreness: string;
+  illness: boolean;
+  avgHr: string;
+  maxHr: string;
+  trainingLoad: string;
+  elevationGainM: string;
+}) {
+  const rpe = nullableNumber(data.rpe);
+  const manualLoad = nullableNumber(data.trainingLoad);
+  const estimatedLoad = manualLoad == null && rpe != null ? (data.durationSeconds / 60) * rpe * 0.6 : null;
+
+  return {
+    workout_type: data.workoutType || null,
+    rpe,
+    soreness: nullableNumber(data.soreness),
+    illness: data.illness,
+    avg_hr: nullableNumber(data.avgHr),
+    max_hr: nullableNumber(data.maxHr),
+    training_load: manualLoad ?? estimatedLoad,
+    training_load_source: manualLoad != null ? "manual" : estimatedLoad != null ? "estimated_rpe" : "manual",
+    elevation_gain_m: nullableNumber(data.elevationGainM),
+  };
+}
+
 export default function CoachUploadForRunnerPage({ params }: Props) {
   const router = useRouter();
   const { isLoaded, userId } = useAuth();
@@ -40,6 +73,14 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
     duration: "",
     pace: "",
     date: new Date().toISOString().split("T")[0],
+    workoutType: "easy",
+    rpe: "",
+    soreness: "",
+    illness: false,
+    avgHr: "",
+    maxHr: "",
+    trainingLoad: "",
+    elevationGainM: "",
     notes: "",
   });
   
@@ -88,6 +129,17 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
           file_type: "manual",
           original_filename: "Manual entry",
           notes: manualData.notes || null,
+          ...buildTrainingFields({
+            durationSeconds,
+            workoutType: manualData.workoutType,
+            rpe: manualData.rpe,
+            soreness: manualData.soreness,
+            illness: manualData.illness,
+            avgHr: manualData.avgHr,
+            maxHr: manualData.maxHr,
+            trainingLoad: manualData.trainingLoad,
+            elevationGainM: manualData.elevationGainM,
+          }),
         });
 
         if (error) throw error;
@@ -121,6 +173,17 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
           original_filename: file.name,
           screenshot_urls: [data.publicUrl],
           notes: manualData.notes || null,
+          ...buildTrainingFields({
+            durationSeconds,
+            workoutType: manualData.workoutType,
+            rpe: manualData.rpe,
+            soreness: manualData.soreness,
+            illness: manualData.illness,
+            avgHr: manualData.avgHr,
+            maxHr: manualData.maxHr,
+            trainingLoad: manualData.trainingLoad,
+            elevationGainM: manualData.elevationGainM,
+          }),
         });
 
         if (error) throw error;
@@ -225,6 +288,46 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
                 <div>
                   <label className="block text-sm font-bold mb-1">Pace</label>
                   <input type="text" value={manualData.pace} onChange={(event) => setManualData({ ...manualData, pace: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="8:32" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Workout Type</label>
+                  <select value={manualData.workoutType} onChange={(event) => setManualData({ ...manualData, workoutType: event.target.value })} className="w-full border rounded-lg px-3 py-2">
+                    <option value="easy">Easy</option>
+                    <option value="tempo">Tempo</option>
+                    <option value="interval">Interval</option>
+                    <option value="long">Long Run</option>
+                    <option value="race">Race</option>
+                    <option value="recovery">Recovery</option>
+                    <option value="cross">Cross Training</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Effort (RPE 1-10)</label>
+                  <input type="number" min="1" max="10" value={manualData.rpe} onChange={(event) => setManualData({ ...manualData, rpe: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="6" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Soreness (1-10)</label>
+                  <input type="number" min="1" max="10" value={manualData.soreness} onChange={(event) => setManualData({ ...manualData, soreness: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="3" />
+                </div>
+                <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+                  <input type="checkbox" checked={manualData.illness} onChange={(event) => setManualData({ ...manualData, illness: event.target.checked })} className="h-4 w-4" />
+                  Sick today
+                </label>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Avg HR</label>
+                  <input type="number" min="1" max="250" value={manualData.avgHr} onChange={(event) => setManualData({ ...manualData, avgHr: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Max HR</label>
+                  <input type="number" min="1" max="250" value={manualData.maxHr} onChange={(event) => setManualData({ ...manualData, maxHr: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Garmin Load</label>
+                  <input type="number" min="0" step="0.01" value={manualData.trainingLoad} onChange={(event) => setManualData({ ...manualData, trainingLoad: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Elevation Gain (m)</label>
+                  <input type="number" min="0" value={manualData.elevationGainM} onChange={(event) => setManualData({ ...manualData, elevationGainM: event.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
                 </div>
               </div>
               <div>

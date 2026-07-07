@@ -99,7 +99,7 @@ export default async function RunnersPage() {
                 <div key={runner.id} className="rounded-xl border border-white/10 bg-[#111827] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-bold text-white">{runner.first_name} {runner.last_name}</div>
+                      <Link href={`/runners/${runner.id}`} className="font-bold text-white transition hover:text-[#7dd3fc]">{runner.first_name} {runner.last_name}</Link>
                       <div className="mt-1 text-sm text-[#94a3b8]">Grade {runner.grade}</div>
                     </div>
                     <div className="text-right font-mono text-xs font-bold text-[#7dd3fc]">
@@ -119,6 +119,9 @@ export default async function RunnersPage() {
                     ))}
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2">
+                    <Link href={`/runners/${runner.id}`} className="rounded-lg border border-[#00a7ff]/40 bg-[#00a7ff]/10 px-3 py-2 text-center text-sm font-bold text-[#7dd3fc] transition hover:bg-[#00a7ff]/20">
+                      Profile
+                    </Link>
                     <Link href={`/runners/upload/${runner.id}`} className="rounded-lg bg-[#008cff] px-3 py-2 text-center text-sm font-bold text-white shadow-sm shadow-[#008cff]/20 transition hover:bg-[#00a7ff]">
                       Upload
                     </Link>
@@ -154,7 +157,7 @@ export default async function RunnersPage() {
                 {runners.map((runner) => (
                   <tr key={runner.id} className="transition hover:bg-white/[0.04]">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-white">{runner.first_name} {runner.last_name}</div>
+                      <Link href={`/runners/${runner.id}`} className="font-bold text-white transition hover:text-[#7dd3fc]">{runner.first_name} {runner.last_name}</Link>
                       <div className="mt-1 text-xs text-[#94a3b8]">Runner profile</div>
                     </td>
                     <td className="px-6 py-4 text-[#cbd5e1]">{runner.grade}th</td>
@@ -185,6 +188,9 @@ export default async function RunnersPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-2">
+                        <Link href={`/runners/${runner.id}`} className="rounded-lg border border-[#00a7ff]/40 bg-[#00a7ff]/10 px-3 py-2 text-sm font-bold text-[#7dd3fc] transition hover:bg-[#00a7ff]/20">
+                          Profile
+                        </Link>
                         <Link href={`/runners/upload/${runner.id}`} className="rounded-lg bg-[#008cff] px-3 py-2 text-sm font-bold text-white shadow-sm shadow-[#008cff]/20 transition hover:bg-[#00a7ff] hover:shadow-md hover:shadow-[#00a7ff]/30">
                           Upload Run
                         </Link>

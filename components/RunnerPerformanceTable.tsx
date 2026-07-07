@@ -13,6 +13,12 @@ interface RunnerPerformance {
   previous_7_days_distance: number;
   distance_change_percent: number;
   last_activity_date: string;
+  acwr_ratio?: number | null;
+  load_status?: string | null;
+  hrv_status?: string | null;
+  recovery_date?: string | null;
+  alert_count?: number;
+  highest_alert_severity?: string | null;
 }
 
 export default function RunnerPerformanceTable({ performances }: { performances: RunnerPerformance[] }) {
@@ -42,6 +48,38 @@ export default function RunnerPerformanceTable({ performances }: { performances:
     if (change > 10) return 'text-[#00ff67]';
     if (change < -10) return 'text-red-500';
     return 'text-slate-500';
+  };
+
+  const getLoadBadge = (status?: string | null, ratio?: number | null) => {
+    const label = status === "high_load"
+      ? "High"
+      : status === "elevated_load"
+        ? "Elevated"
+        : status === "detraining"
+          ? "Low"
+          : ratio == null
+            ? "No load"
+            : "Optimal";
+    const color = status === "high_load"
+      ? "text-red-500 bg-red-500/10"
+      : status === "elevated_load"
+        ? "text-orange-500 bg-orange-500/10"
+        : status === "detraining"
+          ? "text-[#7dd3fc] bg-[#00a7ff]/10"
+          : ratio == null
+            ? "text-slate-500 bg-slate-500/10"
+            : "text-[#00ff67] bg-[#00ff67]/10";
+    return <span className={`inline-flex rounded px-2 py-1 text-xs font-bold ${color}`}>{label}</span>;
+  };
+
+  const getRecoveryBadge = (status?: string | null) => {
+    if (!status) return <span className="text-xs font-bold text-slate-500">Missing</span>;
+    const color = status === "low" || status === "poor"
+      ? "text-red-500 bg-red-500/10"
+      : status === "unbalanced"
+        ? "text-orange-500 bg-orange-500/10"
+        : "text-[#00ff67] bg-[#00ff67]/10";
+    return <span className={`inline-flex rounded px-2 py-1 text-xs font-bold ${color}`}>{status}</span>;
   };
 
   return (
@@ -90,7 +128,20 @@ export default function RunnerPerformanceTable({ performances }: { performances:
                   {perf.distance_change_percent.toFixed(1)}%
                 </p>
               </div>
+              <div>
+                <p className="text-slate-400">ACWR</p>
+                <p className="font-bold text-white">{perf.acwr_ratio == null ? "--" : perf.acwr_ratio.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Recovery</p>
+                <div>{getRecoveryBadge(perf.hrv_status)}</div>
+              </div>
             </div>
+            {(perf.alert_count || 0) > 0 && (
+              <div className="mt-3 rounded-lg border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-2 text-sm font-bold text-[#7dd3fc]">
+                {perf.alert_count} open alert{perf.alert_count === 1 ? "" : "s"}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -106,6 +157,9 @@ export default function RunnerPerformanceTable({ performances }: { performances:
               <th className="text-center py-3 px-4 font-semibold text-slate-700">Best Pace</th>
               <th className="text-center py-3 px-4 font-semibold text-slate-700">Pace Trend</th>
               <th className="text-center py-3 px-4 font-semibold text-slate-700">7-Day Change</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">ACWR</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">Recovery</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">Alerts</th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +192,22 @@ export default function RunnerPerformanceTable({ performances }: { performances:
                     {perf.distance_change_percent > 0 ? '+' : ''}
                     {perf.distance_change_percent.toFixed(1)}%
                   </span>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  <div className="font-bold text-slate-900">{perf.acwr_ratio == null ? "--" : perf.acwr_ratio.toFixed(2)}</div>
+                  <div className="mt-1">{getLoadBadge(perf.load_status, perf.acwr_ratio)}</div>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  {getRecoveryBadge(perf.hrv_status)}
+                </td>
+                <td className="py-3 px-4 text-center">
+                  {(perf.alert_count || 0) > 0 ? (
+                    <span className="inline-flex rounded bg-[#00a7ff]/10 px-2 py-1 text-xs font-bold text-[#00a7ff]">
+                      {perf.alert_count} {perf.highest_alert_severity || "open"}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">None</span>
+                  )}
                 </td>
               </tr>
             ))}
