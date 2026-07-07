@@ -16,7 +16,7 @@ async function sendMessage(formData: FormData) {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .maybeSingle();
 
   if (!coach?.id) {
@@ -74,7 +74,7 @@ export default async function MessageParentsPage({
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .maybeSingle();
 
   const { data: runners } = coach?.id

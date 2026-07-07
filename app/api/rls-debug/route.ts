@@ -30,8 +30,8 @@ export async function GET() {
 
   const coachResult = await supabase
     .from("coaches")
-    .select("id, email, name")
-    .eq("email", userId)
+    .select("id, email, clerk_id, name")
+    .eq("clerk_id", userId)
     .maybeSingle();
 
   const runnerResult = coachResult.data?.id

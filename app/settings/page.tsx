@@ -20,11 +20,12 @@ async function saveCoachProfile(formData: FormData) {
   const { data: existingCoach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   const payload = {
     email: userId,
+    clerk_id: userId,
     name,
     school_name: schoolName || null,
   };
@@ -59,7 +60,7 @@ export default async function CoachSettingsPage({
   const { data: coach, error } = await supabase
     .from("coaches")
     .select("id, name, school_name")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   return (

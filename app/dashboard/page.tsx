@@ -70,9 +70,9 @@ async function verifyActivity(activityId: string) {
   
   const { data: activity } = await supabase
     .from("activities")
-    .select("id, runners!inner(coach_id, coaches!inner(email))")
+    .select("id, runners!inner(coach_id, coaches!inner(clerk_id))")
     .eq("id", activityId)
-    .eq("runners.coaches.email", userId)
+    .eq("runners.coaches.clerk_id", userId)
     .single();
   
   if (!activity?.id) redirect("/dashboard");
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   const { data: coachProfile } = coach?.id

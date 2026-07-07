@@ -27,9 +27,9 @@ async function updateActivity(activityId: string, formData: FormData) {
 
   const { data: activity } = await supabase
     .from("activities")
-    .select("id, duration_seconds, runners!inner(coach_id, coaches!inner(email))")
+    .select("id, duration_seconds, runners!inner(coach_id, coaches!inner(clerk_id))")
     .eq("id", activityId)
-    .eq("runners.coaches.email", userId)
+    .eq("runners.coaches.clerk_id", userId)
     .single();
 
   if (!activity?.id) redirect("/activities");
@@ -87,11 +87,11 @@ export default async function EditActivityPage({
         first_name,
         last_name,
         coach_id,
-        coaches!inner(email)
+        coaches!inner(clerk_id)
       )
     `)
     .eq("id", activityId)
-    .eq("runners.coaches.email", userId)
+    .eq("runners.coaches.clerk_id", userId)
     .single();
 
   if (!activity) redirect("/activities");

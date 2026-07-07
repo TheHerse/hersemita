@@ -13,7 +13,7 @@ export default async function RunnersPage() {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   if (coach?.id) {

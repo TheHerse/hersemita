@@ -13,7 +13,7 @@ export default async function AnalyticsPage() {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name, school_name")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   if (coach?.id) {

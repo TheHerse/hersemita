@@ -14,7 +14,7 @@ async function deleteRunner(runnerId: string) {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   if (!coach?.id) redirect("/runners");
@@ -58,7 +58,7 @@ export default async function DeleteRunnerPage({
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   if (!coach?.id) redirect("/runners");

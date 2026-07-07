@@ -27,7 +27,7 @@ export default async function NewRunnerPage() {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   if (coach?.id) {
@@ -64,7 +64,7 @@ export default async function NewRunnerPage() {
     const { data: coachData, error: coachError } = await supabase
       .from("coaches")
       .select("id")
-      .eq("email", userId)
+      .eq("clerk_id", userId)
       .single();
     let coach = coachData;
     
@@ -75,7 +75,7 @@ export default async function NewRunnerPage() {
     if (!coach) {
       const { data: newCoach, error: createError } = await supabase
         .from("coaches")
-        .insert({ email: userId, name: "Coach" })
+        .insert({ email: userId, clerk_id: userId, name: "Coach" })
         .select()
         .single();
       

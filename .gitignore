@@ -32,6 +32,9 @@ yarn-error.log*
 dev-server*.log
 .local-log-backup/
 
+# local architecture/security notes
+docs/supabase-architecture-audit.md
+
 # env files (can opt-in for committing if needed)
 .env*
 

@@ -35,7 +35,7 @@ async function getCoach() {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .maybeSingle();
 
   return { supabase, coach };

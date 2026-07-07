@@ -27,7 +27,7 @@ async function getCoachId(userId: string) {
   const { data: coach } = await supabase
     .from("coaches")
     .select("id")
-    .eq("email", userId)
+    .eq("clerk_id", userId)
     .single();
 
   return coach?.id as string | undefined;
