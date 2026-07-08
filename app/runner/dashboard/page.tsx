@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import RunnerPortalHeader from "@/components/RunnerPortalHeader";
+import { distanceUnitLabel, normalizeDistanceUnit, type DistanceUnit } from "@/lib/distance-units";
 
 type Runner = {
   id: string;
@@ -10,11 +11,13 @@ type Runner = {
   grade: number | null;
   schoolName: string;
   coachName: string;
+  preferredDistanceUnit?: DistanceUnit;
 };
 
 type Activity = {
   id: string;
   distanceMiles: number;
+  distance?: number;
   pace: string;
   durationSeconds: number;
   startTime: string;
@@ -29,6 +32,8 @@ type AnalyticsResponse = {
     totalRuns: number;
     totalMiles: number;
     weekMiles: number;
+    totalDistance?: number;
+    weekDistance?: number;
     verifiedCount: number;
     fastestPace: string;
   };
@@ -59,7 +64,7 @@ export default function RunnerDashboardPage() {
     let active = true;
 
     async function loadAnalytics() {
-      const response = await fetch("/api/runner-analytics");
+      const response = await fetch("/api/runner-analytics", { cache: "no-store" });
       const result = await response.json().catch(() => null) as AnalyticsResponse & { error?: string } | null;
 
       if (!active) return;
@@ -91,7 +96,12 @@ export default function RunnerDashboardPage() {
     grade: null,
     schoolName: "Your school",
     coachName: "Coach",
+    preferredDistanceUnit: "miles" as DistanceUnit,
   };
+  const preferredDistanceUnit = normalizeDistanceUnit(runner.preferredDistanceUnit);
+  const unitLabel = distanceUnitLabel(preferredDistanceUnit);
+  const totalDistance = data?.summary.totalDistance ?? data?.summary.totalMiles ?? 0;
+  const weekDistance = data?.summary.weekDistance ?? data?.summary.weekMiles ?? 0;
 
   return (
     <div className="min-h-screen hersemita-page-bg">
@@ -112,8 +122,8 @@ export default function RunnerDashboardPage() {
           <>
             <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard label="Total Runs" value={String(data.summary.totalRuns)} />
-              <StatCard label="Total Miles" value={data.summary.totalMiles.toFixed(1)} />
-              <StatCard label="Last 7 Days" value={`${data.summary.weekMiles.toFixed(1)} mi`} />
+              <StatCard label={`Total ${unitLabel}`} value={totalDistance.toFixed(1)} />
+              <StatCard label="Last 7 Days" value={`${weekDistance.toFixed(1)} ${unitLabel}`} />
               <StatCard label="Best Pace" value={data.summary.fastestPace} />
             </section>
 
@@ -142,8 +152,8 @@ export default function RunnerDashboardPage() {
                         </div>
                         <dl className="grid grid-cols-3 gap-3 text-center text-sm sm:min-w-[320px]">
                           <div>
-                            <dt className="text-slate-500">Miles</dt>
-                            <dd className="font-bold text-slate-900">{activity.distanceMiles.toFixed(2)}</dd>
+                            <dt className="text-slate-500">{unitLabel}</dt>
+                            <dd className="font-bold text-slate-900">{(activity.distance ?? activity.distanceMiles).toFixed(2)}</dd>
                           </div>
                           <div>
                             <dt className="text-slate-500">Pace</dt>

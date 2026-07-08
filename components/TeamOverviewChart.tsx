@@ -14,6 +14,7 @@ interface RunnerStats {
 
 interface TeamOverviewChartProps {
   runnerStats: RunnerStats[];
+  unitLabel?: string;
 }
 
 interface TooltipPayload {
@@ -24,17 +25,19 @@ function CustomTooltip({
   active,
   payload,
   label,
+  unitLabel = "mi",
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
   label?: string;
+  unitLabel?: string;
 }) {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-3 rounded-lg shadow-lg border border-slate-200">
         <p className="font-semibold text-slate-900 mb-1">{label}</p>
         <p className="text-[#00a7ff] text-sm">
-          Distance: {payload[0].value.toFixed(1)} mi
+          Distance: {payload[0].value.toFixed(1)} {unitLabel}
         </p>
         <p className="text-[#00ff67] text-sm">
           Activities: {payload[1].value}
@@ -45,7 +48,7 @@ function CustomTooltip({
   return null;
 }
 
-export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProps) {
+export default function TeamOverviewChart({ runnerStats, unitLabel = "mi" }: TeamOverviewChartProps) {
   const data = runnerStats.map(r => ({
     name: r.runner_name,
     distance: r.total_distance,
@@ -91,11 +94,11 @@ export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProp
             axisLine={{ stroke: 'var(--border)' }}
             tickLine={{ stroke: 'var(--border)' }}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0, 167, 255, 0.08)' }} />
+          <Tooltip content={<CustomTooltip unitLabel={unitLabel} />} cursor={{ fill: 'rgba(0, 167, 255, 0.08)' }} />
           <Bar 
             yAxisId="left" 
             dataKey="distance" 
-            name="Total Distance (mi)" 
+            name={`Total Distance (${unitLabel})`} 
             fill="#00a7ff"
             radius={[4, 4, 0, 0]}
           />
@@ -112,7 +115,7 @@ export default function TeamOverviewChart({ runnerStats }: TeamOverviewChartProp
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <div className="rounded-xl border border-[#00a7ff]/20 bg-[#00a7ff]/10 p-4">
           <div className="text-2xl font-bold text-[#00a7ff]">
-            {runnerStats.reduce((sum, r) => sum + r.total_distance, 0).toFixed(1)} mi
+            {runnerStats.reduce((sum, r) => sum + r.total_distance, 0).toFixed(1)} {unitLabel}
           </div>
           <div className="text-sm text-slate-600 font-medium">Team Total</div>
         </div>

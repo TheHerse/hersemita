@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getRunnerSession } from "@/lib/runner-session";
+import { milesToDistance, normalizeDistanceUnit, paceFromMiles, type DistanceUnit } from "@/lib/distance-units";
+
+export const dynamic = "force-dynamic";
+
+function paceForUnit(secondsPerMile: number | null, preferredDistanceUnit: DistanceUnit) {
+  if (!secondsPerMile || secondsPerMile <= 0) return null;
+  return paceFromMiles(secondsPerMile, preferredDistanceUnit);
+}
 
 function formatPace(seconds: number | null) {
   if (!seconds || seconds <= 0) return "--";
@@ -17,7 +25,7 @@ export async function GET() {
 
   const { data: runner, error: runnerError } = await supabaseAdmin
     .from("runners")
-    .select("id, first_name, last_name, grade, coaches(name, school_name)")
+    .select("id, first_name, last_name, grade, coaches(name, school_name, preferred_distance_unit)")
     .eq("id", session.runnerId)
     .maybeSingle();
 
@@ -49,6 +57,7 @@ export async function GET() {
     .reduce((sum, activity) => sum + Number(activity.distance_miles || 0), 0);
 
   const coach = Array.isArray(runner.coaches) ? runner.coaches[0] : runner.coaches;
+  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
 
   return NextResponse.json({
     runner: {
@@ -57,18 +66,22 @@ export async function GET() {
       grade: runner.grade,
       schoolName: coach?.school_name || "Your school",
       coachName: coach?.name || "Coach",
+      preferredDistanceUnit,
     },
     summary: {
       totalRuns: safeActivities.length,
       totalMiles,
       weekMiles,
+      totalDistance: milesToDistance(totalMiles, preferredDistanceUnit),
+      weekDistance: milesToDistance(weekMiles, preferredDistanceUnit),
       verifiedCount,
-      fastestPace: formatPace(fastest),
+      fastestPace: formatPace(paceForUnit(fastest, preferredDistanceUnit)),
     },
     activities: safeActivities.slice(0, 12).map((activity) => ({
       id: activity.id,
       distanceMiles: Number(activity.distance_miles || 0),
-      pace: formatPace(activity.pace_per_mile),
+      distance: milesToDistance(Number(activity.distance_miles || 0), preferredDistanceUnit),
+      pace: formatPace(paceForUnit(activity.pace_per_mile, preferredDistanceUnit)),
       durationSeconds: activity.duration_seconds,
       startTime: activity.start_time,
       verified: Boolean(activity.verified),

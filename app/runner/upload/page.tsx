@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { parseOCR } from '@/lib/ocr-parser';
 import RunnerPortalHeader from '@/components/RunnerPortalHeader';
+import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, type DistanceUnit } from '@/lib/distance-units';
 
 // Use the type from your ocr-parser file
 type ParsedRunData = {
@@ -23,6 +24,7 @@ export default function UploadPage() {
   const [runnerName, setRunnerName] = useState('');
   const [schoolName, setSchoolName] = useState('Your school');
   const [coachName, setCoachName] = useState('Coach');
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>('miles');
   const [screenshots, setScreenshots] = useState<File[]>([]);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,7 @@ export default function UploadPage() {
   const [rawValues, setRawValues] = useState({ distance: '', pace: '' });
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [entryMode, setEntryMode] = useState<'proof' | 'manual'>('proof');
   
   const [formData, setFormData] = useState({
     distance: '',
@@ -52,9 +55,9 @@ export default function UploadPage() {
     let active = true;
 
     async function loadSession() {
-      const response = await fetch('/api/runner-session');
+      const response = await fetch('/api/runner-session', { cache: 'no-store' });
       const result = await response.json().catch(() => null) as {
-        runner?: { id: string; name: string; schoolName?: string; coachName?: string };
+        runner?: { id: string; name: string; schoolName?: string; coachName?: string; preferredDistanceUnit?: string };
       } | null;
 
       if (!active) return;
@@ -67,6 +70,7 @@ export default function UploadPage() {
       setRunnerName(result.runner.name);
       setSchoolName(result.runner.schoolName || 'Your school');
       setCoachName(result.runner.coachName || 'Coach');
+      setDistanceUnit(normalizeDistanceUnit(result.runner.preferredDistanceUnit));
       setLoading(false);
     }
 
@@ -94,6 +98,16 @@ export default function UploadPage() {
 
   const removeScreenshot = (index: number) => {
     setScreenshots(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const startManualEntry = () => {
+    setEntryMode('manual');
+    setScreenshotUrls([]);
+    setScreenshots([]);
+    setDetectedApp('manual');
+    setRawValues({ distance: '', pace: '' });
+    setError(null);
+    setShowForm(true);
   };
 
   const processImages = async (skipOcr = false) => {
@@ -132,7 +146,7 @@ export default function UploadPage() {
         
         // Convert nulls to empty strings safely
         setFormData({
-          distance: parsed.distance != null ? String(parsed.distance) : '',
+          distance: parsed.distance != null ? String(Number(milesToDistance(parsed.distance, distanceUnit).toFixed(2))) : '',
           duration: parsed.duration || '',
           pace: parsed.pace || '',
           date: parsed.date || new Date().toISOString().split('T')[0],
@@ -154,12 +168,14 @@ export default function UploadPage() {
         });
       }
       
+      setEntryMode('proof');
       setShowForm(true);
     } catch (err) {
       console.error(err);
       if (uploadedUrls.length > 0) {
         setScreenshotUrls(uploadedUrls);
         setError('The screenshot was saved, but the parser could not read it. Please enter the run details manually.');
+        setEntryMode('proof');
         setShowForm(true);
       } else {
         setError(err instanceof Error ? err.message : 'Failed to process');
@@ -171,9 +187,8 @@ export default function UploadPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!runnerId || screenshotUrls.length === 0) {
-      setError('Please upload at least one screenshot so your coach can verify the run.');
-      setShowForm(false);
+    if (!runnerId) {
+      setError('Runner session required. Please log in again.');
       return;
     }
 
@@ -200,6 +215,7 @@ export default function UploadPage() {
         body: JSON.stringify({
           screenshotUrls,
           distance,
+          distanceUnit,
           durationSeconds,
           paceSeconds,
           date: formData.date,
@@ -275,6 +291,10 @@ export default function UploadPage() {
             <button onClick={() => processImages(true)} disabled={screenshots.length === 0 || processing} className="w-full mt-3 border border-slate-300 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50">
               Save Screenshot and Enter Manually
             </button>
+
+            <button onClick={startManualEntry} disabled={processing} className="w-full mt-3 rounded-lg border border-[#00a7ff]/40 bg-[#00a7ff]/10 py-3 font-bold text-[#0369a1] transition hover:bg-[#00a7ff]/15 disabled:opacity-50">
+              Enter Run Without Screenshot
+            </button>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
@@ -282,6 +302,12 @@ export default function UploadPage() {
               <span className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center">✓</span>
               <h3 className="font-semibold text-lg">Review Details Before Sending</h3>
             </div>
+
+            {entryMode === 'manual' && screenshotUrls.length === 0 && (
+              <div className="mb-6 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+                Manual entry is allowed when you cannot upload a screenshot. Your coach may still ask for proof before verifying the run.
+              </div>
+            )}
 
             {screenshotUrls.length > 0 && (
               <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
@@ -297,7 +323,7 @@ export default function UploadPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold mb-1">
-                    Distance (mi) {rawValues.distance && <span className="text-slate-400 font-normal">(was {rawValues.distance})</span>}
+                    Distance ({distanceUnitLabel(distanceUnit)}) {rawValues.distance && <span className="text-slate-400 font-normal">(was {rawValues.distance})</span>}
                   </label>
                   <input type="number" step="0.01" required value={formData.distance} onChange={e => setFormData({...formData, distance: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
                 </div>
@@ -311,7 +337,7 @@ export default function UploadPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-1">
-                    Pace {rawValues.pace && <span className="text-slate-400 font-normal">(was {rawValues.pace})</span>}
+                    Pace per {distanceUnitLabel(distanceUnit)} {rawValues.pace && <span className="text-slate-400 font-normal">(was {rawValues.pace})</span>}
                   </label>
                   <input type="text" value={formData.pace} onChange={e => setFormData({...formData, pace: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="8:32" />
                 </div>
@@ -331,11 +357,11 @@ export default function UploadPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Effort (RPE 1-10)</label>
+                  <HelpLabel label="Effort (RPE 1-10)" help="Rate how hard the run felt. 1 is very easy, 5-6 is steady, and 10 is all-out race effort." />
                   <input type="number" min="1" max="10" value={formData.rpe} onChange={e => setFormData({...formData, rpe: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="6" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Soreness (1-10)</label>
+                  <HelpLabel label="Soreness (1-10)" help="How sore you felt before or after the run. 1 is fresh, 10 means very sore or limited." />
                   <input type="number" min="1" max="10" value={formData.soreness} onChange={e => setFormData({...formData, soreness: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="3" />
                 </div>
                 <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
@@ -343,19 +369,19 @@ export default function UploadPage() {
                   Sick today
                 </label>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Avg HR</label>
+                  <HelpLabel label="Avg HR" help="Average heart rate for the activity, if your watch or app shows it." />
                   <input type="number" min="1" max="250" value={formData.avgHr} onChange={e => setFormData({...formData, avgHr: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Max HR</label>
+                  <HelpLabel label="Max HR" help="Highest heart rate reached during the activity, if available." />
                   <input type="number" min="1" max="250" value={formData.maxHr} onChange={e => setFormData({...formData, maxHr: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Garmin Load</label>
+                  <HelpLabel label="Garmin Load" help="Garmin's training load number for the activity. Leave it blank if you do not see one." />
                   <input type="number" min="0" step="0.01" value={formData.trainingLoad} onChange={e => setFormData({...formData, trainingLoad: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Elevation Gain (m)</label>
+                  <HelpLabel label="Elevation Gain (m)" help="Total climbing from the activity. Most apps show this in feet or meters; enter meters for now." />
                   <input type="number" min="0" value={formData.elevationGainM} onChange={e => setFormData({...formData, elevationGainM: e.target.value})} className="w-full border rounded-lg px-3 py-2" placeholder="Optional" />
                 </div>
               </div>
@@ -376,5 +402,25 @@ export default function UploadPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function HelpLabel({ label, help }: { label: string; help: string }) {
+  return (
+    <label className="mb-1 flex items-center gap-2 text-sm font-bold text-slate-900">
+      <span>{label}</span>
+      <span className="group relative inline-flex">
+        <span
+          tabIndex={0}
+          aria-label={help}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-xs font-black text-slate-500 outline-none transition hover:border-[#00a7ff] hover:text-[#00a7ff] focus:border-[#00a7ff] focus:text-[#00a7ff]"
+        >
+          ?
+        </span>
+        <span className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 -translate-x-1/2 rounded-lg border border-slate-200 bg-white p-3 text-xs font-medium leading-relaxed text-slate-600 shadow-xl group-hover:block group-focus-within:block">
+          {help}
+        </span>
+      </span>
+    </label>
   );
 }

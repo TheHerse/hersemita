@@ -27,7 +27,7 @@ export default function RunnerPortalHeader({
 
   async function logout() {
     await fetch("/api/runner-session", { method: "DELETE" });
-    router.push("/runner/login");
+    router.replace("/runner/login");
   }
 
   return (

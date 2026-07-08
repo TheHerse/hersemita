@@ -4,6 +4,7 @@ import ActivityAppBadge from "@/components/ActivityAppBadge";
 import CoachHeader from "@/components/CoachHeader";
 import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
+import { distanceToMiles, distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles, paceToMiles } from "@/lib/distance-units";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 function nullableNumber(value: FormDataEntryValue | null) {
@@ -18,6 +19,11 @@ function workoutTypeValue(value: FormDataEntryValue | null) {
   return allowed.has(value) ? value : null;
 }
 
+function nestedCoach(activity: any) {
+  const runner = Array.isArray(activity?.runners) ? activity.runners[0] : activity?.runners;
+  return Array.isArray(runner?.coaches) ? runner.coaches[0] : runner?.coaches;
+}
+
 async function updateActivity(activityId: string, formData: FormData) {
   "use server";
 
@@ -27,16 +33,19 @@ async function updateActivity(activityId: string, formData: FormData) {
 
   const { data: activity } = await supabase
     .from("activities")
-    .select("id, duration_seconds, runners!inner(coach_id, coaches!inner(clerk_id))")
+    .select("id, duration_seconds, runners!inner(coach_id, coaches!inner(clerk_id, preferred_distance_unit))")
     .eq("id", activityId)
     .eq("runners.coaches.clerk_id", userId)
     .single();
 
   if (!activity?.id) redirect("/activities");
+  const coach = nestedCoach(activity);
+  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
 
   const distance = parseFloat(formData.get("distance") as string);
   const paceMinutes = parseInt(formData.get("paceMinutes") as string) || 0;
   const paceSeconds = parseInt(formData.get("paceSeconds") as string) || 0;
+  const inputPaceSeconds = paceMinutes * 60 + paceSeconds;
   const notes = (formData.get("notes") as string)?.trim();
   const verified = formData.get("verified") === "on";
   const rpe = nullableNumber(formData.get("rpe"));
@@ -46,8 +55,8 @@ async function updateActivity(activityId: string, formData: FormData) {
   const { error } = await supabase
     .from("activities")
     .update({
-      distance_miles: distance,
-      pace_per_mile: paceMinutes * 60 + paceSeconds,
+      distance_miles: distanceToMiles(distance, preferredDistanceUnit),
+      pace_per_mile: Math.round(paceToMiles(inputPaceSeconds, preferredDistanceUnit)),
       notes: notes || null,
       verified,
       workout_type: workoutTypeValue(formData.get("workoutType")),
@@ -87,7 +96,7 @@ export default async function EditActivityPage({
         first_name,
         last_name,
         coach_id,
-        coaches!inner(clerk_id)
+        coaches!inner(clerk_id, preferred_distance_unit)
       )
     `)
     .eq("id", activityId)
@@ -96,8 +105,13 @@ export default async function EditActivityPage({
 
   if (!activity) redirect("/activities");
 
-  const paceMinutes = Math.floor((activity.pace_per_mile || 0) / 60);
-  const paceSeconds = Math.round((activity.pace_per_mile || 0) % 60);
+  const coach = nestedCoach(activity);
+  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const unitLabel = distanceUnitLabel(preferredDistanceUnit);
+  const distanceDisplay = milesToDistance(Number(activity.distance_miles || 0), preferredDistanceUnit);
+  const paceDisplaySeconds = paceFromMiles(Number(activity.pace_per_mile || 0), preferredDistanceUnit);
+  const paceMinutes = Math.floor(paceDisplaySeconds / 60);
+  const paceSeconds = Math.round(paceDisplaySeconds % 60);
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
@@ -113,25 +127,25 @@ export default async function EditActivityPage({
             <span>{new Date(activity.start_time).toLocaleDateString()}</span>
             <span>/</span>
             <ActivityAppBadge app={activity.detected_app} />
-            <span>Current: {activity.distance_miles?.toFixed(2)} mi / {formatPace(activity.pace_per_mile)}/mi</span>
+            <span>Current: {distanceDisplay.toFixed(2)} {unitLabel} / {formatPace(paceDisplaySeconds)}/{unitLabel}</span>
           </div>
         </div>
 
         <form action={updateActivity.bind(null, activity.id)} className="space-y-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Distance (miles)</label>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Distance ({unitLabel})</label>
             <input
               name="distance"
               type="number"
               step="0.01"
               required
-              defaultValue={activity.distance_miles?.toFixed(2)}
+              defaultValue={distanceDisplay.toFixed(2)}
               className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Pace (min:sec per mile)</label>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Pace (min:sec per {unitLabel})</label>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
               <input
                 name="paceMinutes"

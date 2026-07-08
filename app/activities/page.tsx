@@ -6,6 +6,7 @@ import CoachHeader from "@/components/CoachHeader";
 import DeleteActivityButton from "@/components/DeleteActivityButton";
 import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
+import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 async function verifyActivity(activityId: string) {
@@ -63,9 +64,11 @@ export default async function ActivitiesPage() {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id")
+    .select("id, preferred_distance_unit")
     .eq("clerk_id", userId)
     .single();
+  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const unitLabel = distanceUnitLabel(preferredDistanceUnit);
 
   const { data: activities } = await supabase
     .from("activities")
@@ -102,7 +105,8 @@ export default async function ActivitiesPage() {
         <div className="space-y-4">
           {activities?.map((activity) => {
             const runner = activity.runners;
-            const paceDisplay = formatPace(activity.pace_per_mile);
+            const distanceDisplay = milesToDistance(Number(activity.distance_miles || 0), preferredDistanceUnit);
+            const paceDisplay = formatPace(paceFromMiles(Number(activity.pace_per_mile || 0), preferredDistanceUnit));
 
             return (
               <article key={activity.id} className="rounded-2xl border border-white/10 bg-white/10 p-4 shadow-xl shadow-black/10 backdrop-blur sm:p-5">
@@ -123,11 +127,11 @@ export default async function ActivitiesPage() {
                   <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[240px]">
                     <div className="rounded-xl border border-white/10 bg-[#111827] p-3">
                       <p className="text-[#94a3b8]">Distance</p>
-                      <p className="mt-1 text-lg font-bold text-white">{activity.distance_miles?.toFixed(2)} mi</p>
+                      <p className="mt-1 text-lg font-bold text-white">{distanceDisplay.toFixed(2)} {unitLabel}</p>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-[#111827] p-3">
                       <p className="text-[#94a3b8]">Pace</p>
-                      <p className="mt-1 text-lg font-bold text-white">{paceDisplay}/mi</p>
+                      <p className="mt-1 text-lg font-bold text-white">{paceDisplay}/{unitLabel}</p>
                     </div>
                   </div>
                 </div>

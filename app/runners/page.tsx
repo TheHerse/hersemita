@@ -2,8 +2,9 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import Link from "next/link";
-import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
+import { ensureDefaultRunnerGroups } from "@/lib/runner-groups";
 import CoachHeader from "@/components/CoachHeader";
+import RosterWorkbench from "@/components/RosterWorkbench";
 
 export default async function RunnersPage() {
   const { userId } = await auth();
@@ -53,6 +54,10 @@ export default async function RunnersPage() {
 
   const runnerCount = runners?.length || 0;
   const runnersWithParentPhone = runners?.filter((runner) => runner.parent_phone).length || 0;
+  const rosterRows = (runners || []).map((runner) => ({
+    ...runner,
+    groups: runnerGroups.get(runner.id) || [],
+  }));
 
   return (
     <div className="min-h-screen hersemita-page-bg text-[#f8fafc]">
@@ -89,140 +94,7 @@ export default async function RunnersPage() {
         </div>
         
         {runners && runners.length > 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-2xl shadow-black/20 backdrop-blur">
-            <div className="border-b border-white/10 bg-white/[0.06] px-5 py-4">
-              <h3 className="text-lg font-bold text-white">Team Roster</h3>
-              <p className="mt-1 text-sm text-[#94a3b8]">Use groups for future chart filters, messaging lists, and roster reports.</p>
-            </div>
-            <div className="space-y-4 p-4 md:hidden">
-              {runners.map((runner) => (
-                <div key={runner.id} className="rounded-xl border border-white/10 bg-[#111827] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link href={`/runners/${runner.id}`} className="font-bold text-white transition hover:text-[#7dd3fc]">{runner.first_name} {runner.last_name}</Link>
-                      <div className="mt-1 text-sm text-[#94a3b8]">Grade {runner.grade}</div>
-                    </div>
-                    <div className="text-right font-mono text-xs font-bold text-[#7dd3fc]">
-                      <div>{runner.username || "No username"}</div>
-                      <div>{runner.access_code}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {(runnerGroups.get(runner.id) || []).map((group) => (
-                      <span
-                        key={group.id}
-                        className="rounded-full border px-3 py-1 text-xs font-bold text-white"
-                        style={DEFAULT_RUNNER_GROUP_NAMES.includes(group.name) ? getStripedGroupStyle(group.color) : getSolidGroupStyle(group.color)}
-                      >
-                        {group.name}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <Link href={`/runners/${runner.id}`} className="rounded-lg border border-[#00a7ff]/40 bg-[#00a7ff]/10 px-3 py-2 text-center text-sm font-bold text-[#7dd3fc] transition hover:bg-[#00a7ff]/20">
-                      Profile
-                    </Link>
-                    <Link href={`/runners/upload/${runner.id}`} className="rounded-lg bg-[#008cff] px-3 py-2 text-center text-sm font-bold text-white shadow-sm shadow-[#008cff]/20 transition hover:bg-[#00a7ff]">
-                      Upload
-                    </Link>
-                    <Link href={`/runner/login?username=${encodeURIComponent(runner.username || "")}`} className="rounded-lg bg-[#00d95a] px-3 py-2 text-center text-sm font-bold text-white shadow-sm shadow-[#00d95a]/20 transition hover:bg-[#00ff67]">
-                      Portal
-                    </Link>
-                    <Link href={`/runners/${runner.id}/edit`} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-center text-sm font-bold text-white transition hover:bg-white/15">
-                      Edit
-                    </Link>
-                    <Link href={`/runners/${runner.id}/delete`} className="rounded-lg bg-red-500 px-3 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-red-600">
-                      Delete
-                    </Link>
-                  </div>
-                  <div className="mt-3 text-xs text-[#94a3b8]">
-                    {runner.parent_phone ? `Parent: ${runner.parent_phone}` : "No parent phone"}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[880px]">
-              <thead className="border-b border-white/10 bg-[#111827]">
-                <tr>
-                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Runner</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Grade</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Groups</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Upload Credentials</th>
-                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wide text-[#94a3b8]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                {runners.map((runner) => (
-                  <tr key={runner.id} className="transition hover:bg-white/[0.04]">
-                    <td className="px-6 py-4">
-                      <Link href={`/runners/${runner.id}`} className="font-bold text-white transition hover:text-[#7dd3fc]">{runner.first_name} {runner.last_name}</Link>
-                      <div className="mt-1 text-xs text-[#94a3b8]">Runner profile</div>
-                    </td>
-                    <td className="px-6 py-4 text-[#cbd5e1]">{runner.grade}th</td>
-                    <td className="px-6 py-4">
-                      {(runnerGroups.get(runner.id) || []).length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {(runnerGroups.get(runner.id) || []).map((group) => (
-                            <span
-                              key={group.id}
-                              className="rounded-full border px-3 py-1 text-xs font-bold text-white"
-                              style={DEFAULT_RUNNER_GROUP_NAMES.includes(group.name) ? getStripedGroupStyle(group.color) : getSolidGroupStyle(group.color)}
-                            >
-                              {group.name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="rounded-full border border-orange-400/30 bg-orange-400/10 px-3 py-1 text-xs font-semibold text-orange-300">
-                          Ungrouped
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="inline-flex flex-col rounded-md border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-2 font-mono text-sm font-bold text-[#7dd3fc]">
-                        <span>{runner.username || "No username"}</span>
-                        <span>{runner.access_code}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Link href={`/runners/${runner.id}`} className="rounded-lg border border-[#00a7ff]/40 bg-[#00a7ff]/10 px-3 py-2 text-sm font-bold text-[#7dd3fc] transition hover:bg-[#00a7ff]/20">
-                          Profile
-                        </Link>
-                        <Link href={`/runners/upload/${runner.id}`} className="rounded-lg bg-[#008cff] px-3 py-2 text-sm font-bold text-white shadow-sm shadow-[#008cff]/20 transition hover:bg-[#00a7ff] hover:shadow-md hover:shadow-[#00a7ff]/30">
-                          Upload Run
-                        </Link>
-                        <Link 
-                          href={`/runner/login?username=${encodeURIComponent(runner.username || "")}`} 
-                          className="rounded-lg bg-[#00d95a] px-3 py-2 text-sm font-bold text-white shadow-sm shadow-[#00d95a]/20 transition hover:bg-[#00ff67] hover:shadow-md hover:shadow-[#00ff67]/25"
-                        >
-                          Portal Link
-                        </Link>
-                        <Link
-                          href={`/runners/${runner.id}/edit`}
-                          className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-white/15"
-                        >
-                          Edit
-                        </Link>
-                        <Link
-                          href={`/runners/${runner.id}/delete`}
-                          className="rounded-lg bg-red-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600"
-                        >
-                          Delete
-                        </Link>
-                      </div>
-                      <div className="mt-2 text-xs text-[#94a3b8]">
-                        {runner.parent_phone ? `Parent: ${runner.parent_phone}` : "No parent phone"}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              </table>
-            </div>
-          </div>
+          <RosterWorkbench runners={rosterRows} groups={groups || []} />
         ) : (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center shadow-2xl shadow-black/20">
             <h3 className="text-2xl font-bold text-white">No runners added yet</h3>

@@ -21,7 +21,7 @@ interface RunnerPerformance {
   highest_alert_severity?: string | null;
 }
 
-export default function RunnerPerformanceTable({ performances }: { performances: RunnerPerformance[] }) {
+export default function RunnerPerformanceTable({ performances, unitLabel = "mi" }: { performances: RunnerPerformance[]; unitLabel?: string }) {
   const formatPace = (pace: number) => {
     if (!pace || pace === 0) return '--:--';
     const minutes = Math.floor(pace / 60);
@@ -105,17 +105,17 @@ export default function RunnerPerformanceTable({ performances }: { performances:
                 <div className="mt-1 text-sm text-slate-400">{perf.total_activities} activities</div>
               </div>
               <span className="rounded-full bg-[#00a7ff]/10 px-3 py-1 text-sm font-bold text-[#7dd3fc]">
-                {formatDistance(perf.total_distance)} mi
+                {formatDistance(perf.total_distance)} {unitLabel}
               </span>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-slate-400">Avg Pace</p>
-                <p className="font-bold text-white">{formatPace(perf.avg_pace)}/mi</p>
+                <p className="font-bold text-white">{formatPace(perf.avg_pace)}/{unitLabel}</p>
               </div>
               <div>
                 <p className="text-slate-400">Best Pace</p>
-                <p className="font-bold text-[#00ff67]">{formatPace(perf.best_pace)}/mi</p>
+                <p className="font-bold text-[#00ff67]">{formatPace(perf.best_pace)}/{unitLabel}</p>
               </div>
               <div>
                 <p className="text-slate-400">Trend</p>
@@ -174,14 +174,14 @@ export default function RunnerPerformanceTable({ performances }: { performances:
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center font-medium text-slate-700">
-                  {formatDistance(perf.total_distance)} mi
+                  {formatDistance(perf.total_distance)} {unitLabel}
                 </td>
                 <td className="py-3 px-4 text-center font-medium text-slate-700">
-                  {formatPace(perf.avg_pace)}/mi
+                  {formatPace(perf.avg_pace)}/{unitLabel}
                 </td>
                 <td className="py-3 px-4 text-center">
                   <span className="inline-flex items-center px-2 py-1 rounded bg-[#00ff67]/10 text-[#00ff67] font-semibold text-xs">
-                    {formatPace(perf.best_pace)}/mi
+                    {formatPace(perf.best_pace)}/{unitLabel}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center text-xs">

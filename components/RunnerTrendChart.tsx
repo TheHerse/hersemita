@@ -12,7 +12,7 @@ interface Activity {
   verified: boolean;
 }
 
-export default function RunnerTrendChart({ activities }: { activities: Activity[] }) {
+export default function RunnerTrendChart({ activities, unitLabel = "mi" }: { activities: Activity[]; unitLabel?: string }) {
   const chartData = useMemo(() => {
     const latestActivityTime = activities.reduce((latest, activity) => {
       return Math.max(latest, new Date(activity.start_time).getTime());
@@ -54,7 +54,7 @@ export default function RunnerTrendChart({ activities }: { activities: Activity[
         </div>
         <div>
           <h3 className="text-xl font-semibold text-slate-900">7-Day Activity Trend</h3>
-          <p className="text-sm text-slate-500">Verified mileage across the latest training week.</p>
+          <p className="text-sm text-slate-500">Verified distance across the latest training week.</p>
         </div>
       </div>
 
@@ -68,7 +68,7 @@ export default function RunnerTrendChart({ activities }: { activities: Activity[
               />
             </div>
             <div className="text-xs font-medium text-slate-600">{data.day}</div>
-            <div className="text-xs text-slate-400">{data.distance.toFixed(1)} mi</div>
+            <div className="text-xs text-slate-400">{data.distance.toFixed(1)} {unitLabel}</div>
           </div>
         ))}
       </div>

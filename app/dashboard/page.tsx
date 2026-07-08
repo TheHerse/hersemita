@@ -8,8 +8,10 @@ import TeamOverviewChart from "@/components/TeamOverviewChart";
 import RunnerPerformanceTable from "@/components/RunnerPerformanceTable";
 import ActivityAppBadge from "@/components/ActivityAppBadge";
 import CoachHeader from "@/components/CoachHeader";
+import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import TrainingLoadRecoveryPanel from "@/components/TrainingLoadRecoveryPanel";
 import type { LoadRecoveryRow } from "@/components/TrainingLoadRecoveryPanel";
+import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 
 type PaceTrend = 'improving' | 'declining' | 'stable';
 
@@ -94,9 +96,11 @@ export default async function DashboardPage() {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, name")
+    .select("id, name, preferred_distance_unit")
     .eq("clerk_id", userId)
     .single();
+  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const unitLabel = distanceUnitLabel(preferredDistanceUnit);
 
   const { data: coachProfile } = coach?.id
     ? await supabase
@@ -178,8 +182,8 @@ export default async function DashboardPage() {
     return {
       runner_id: runner.id,
       runner_name: `${runner.first_name} ${runner.last_name}`,
-      total_distance: totalDistance,
-      avg_pace: avgPace,
+      total_distance: milesToDistance(totalDistance, preferredDistanceUnit),
+      avg_pace: paceFromMiles(avgPace, preferredDistanceUnit),
       activity_count: runnerActivities.length,
       last_activity_date: runnerActivities[0]?.start_time || ''
     };
@@ -194,7 +198,7 @@ export default async function DashboardPage() {
     id: a.id,
     runner_id: a.runner_id,
     pace_per_mile: a.pace_per_mile,
-    distance_miles: a.distance_miles,
+    distance_miles: milesToDistance(a.distance_miles || 0, preferredDistanceUnit),
     start_time: a.start_time,
     verified: a.verified
   })) || [];
@@ -272,13 +276,13 @@ export default async function DashboardPage() {
       runner_id: runner.id,
       runner_name: `${runner.first_name} ${runner.last_name}`,
       total_activities: runnerActivities.length,
-      total_distance: runnerActivities.reduce((sum, a) => sum + (a.distance_miles || 0), 0),
-      avg_pace: avgPace,
-      best_pace: bestPace,
-      worst_pace: worstPace,
+        total_distance: milesToDistance(runnerActivities.reduce((sum, a) => sum + (a.distance_miles || 0), 0), preferredDistanceUnit),
+        avg_pace: paceFromMiles(avgPace, preferredDistanceUnit),
+        best_pace: paceFromMiles(bestPace, preferredDistanceUnit),
+        worst_pace: paceFromMiles(worstPace, preferredDistanceUnit),
       pace_trend: paceTrend,
-      last_7_days_distance: last7Distance,
-      previous_7_days_distance: prev7Distance,
+        last_7_days_distance: milesToDistance(last7Distance, preferredDistanceUnit),
+        previous_7_days_distance: milesToDistance(prev7Distance, preferredDistanceUnit),
       distance_change_percent: distanceChange,
       last_activity_date: sortedActivities[0]?.start_time || '',
       acwr_ratio: latestLoad?.acwr_ratio == null ? null : Number(latestLoad.acwr_ratio),
@@ -381,7 +385,7 @@ export default async function DashboardPage() {
           </div>
 
           <div className="mb-8">
-            <RunnerPerformanceTable performances={runnerPerformances} />
+            <RunnerPerformanceTable performances={runnerPerformances} unitLabel={unitLabel} />
           </div>
 
           <div className="mb-8">
@@ -389,8 +393,8 @@ export default async function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <TeamOverviewChart runnerStats={runnerStats} />
-            <RunnerTrendChart activities={recentActivities} />
+            <TeamOverviewChart runnerStats={runnerStats} unitLabel={unitLabel} />
+            <RunnerTrendChart activities={recentActivities} unitLabel={unitLabel} />
           </div>
 
           <div className="section-card p-4 sm:p-6">
@@ -415,39 +419,44 @@ export default async function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {activities?.filter(a => !a.verified).slice(0, 5).map((activity) => {
-                  const paceMinutes = Math.floor(activity.pace_per_mile / 60);
-                  const paceSeconds = Math.round(activity.pace_per_mile % 60).toString().padStart(2, '0');
+                  const distanceDisplay = milesToDistance(activity.distance_miles || 0, preferredDistanceUnit);
+                  const paceDisplaySeconds = paceFromMiles(activity.pace_per_mile || 0, preferredDistanceUnit);
+                  const paceMinutes = Math.floor(paceDisplaySeconds / 60);
+                  const paceSeconds = Math.round(paceDisplaySeconds % 60).toString().padStart(2, '0');
                   const pace = `${paceMinutes}:${paceSeconds}`;
                   const runner = activity.runners;
+                  const hasProof = Boolean(activity.screenshot_urls?.length);
                   
                   return (
-                    <div key={activity.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium text-slate-900">{runner.first_name} {runner.last_name}</div>
-                        <div className="text-sm text-slate-600">
-                          {activity.distance_miles?.toFixed(2)} miles / {pace}/mi pace
-                        </div>
-                        {/* Show app info in quick verify */}
-                        <div className="flex items-center gap-2 mt-1">
-                          <ActivityAppBadge app={activity.detected_app} />
-                          {activity.screenshot_urls && activity.screenshot_urls.length > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-[#00a7ff]">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              {activity.screenshot_urls.length} screenshot{activity.screenshot_urls.length > 1 ? 's' : ''}
+                    <div key={activity.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-slate-900">{runner.first_name} {runner.last_name}</div>
+                          <div className="mt-1 text-sm text-slate-600">
+                            {distanceDisplay.toFixed(2)} {unitLabel} / {pace}/{unitLabel} pace / {new Date(activity.start_time).toLocaleDateString()}
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <ActivityAppBadge app={activity.detected_app} />
+                            <span className={hasProof ? "rounded-full bg-[#00a7ff]/10 px-2.5 py-1 text-xs font-bold text-[#0369a1]" : "rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-700"}>
+                              {hasProof ? `${activity.screenshot_urls.length} proof image${activity.screenshot_urls.length > 1 ? "s" : ""}` : "Manual entry"}
                             </span>
-                          )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Link href={`/activities/${activity.id}/edit`} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-center text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                            Edit
+                          </Link>
+                          <form action={verifyActivity.bind(null, activity.id)}>
+                            <button 
+                              type="submit" 
+                              className="w-full rounded-lg bg-[#00d95a] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#00ff67]/20 transition-colors hover:bg-[#00c851] sm:w-auto"
+                            >
+                              Verify
+                            </button>
+                          </form>
                         </div>
                       </div>
-                      <form action={verifyActivity.bind(null, activity.id)}>
-                        <button 
-                          type="submit" 
-                          className="w-full rounded-lg bg-[#00d95a] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#00ff67]/20 transition-colors hover:bg-[#00c851] sm:w-auto"
-                        >
-                          Verify
-                        </button>
-                      </form>
+                      {hasProof && <ScreenshotProofViewer urls={activity.screenshot_urls} />}
                     </div>
                   );
                 })}

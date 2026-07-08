@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import ActivityAppBadge from "@/components/ActivityAppBadge";
 import CoachHeader from "@/components/CoachHeader";
 import { formatPace } from "@/lib/activity-format";
+import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 type RunnerRecord = {
@@ -198,6 +199,14 @@ export default async function RunnerDetailPage({
   const coachId = await getCoachId(userId);
   if (!coachId) redirect("/runners");
 
+  const { data: coach } = await supabase
+    .from("coaches")
+    .select("preferred_distance_unit")
+    .eq("id", coachId)
+    .single();
+  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const unitLabel = distanceUnitLabel(preferredDistanceUnit);
+
   const [
     { data: runner },
     { data: activities },
@@ -261,6 +270,7 @@ export default async function RunnerDetailPage({
   const totalMiles30 = safeActivities
     .filter((activity) => latestActivityTime === 0 || latestActivityTime - new Date(activity.start_time).getTime() <= 30 * 86400000)
     .reduce((sum, activity) => sum + (toNumber(activity.distance_miles) || 0), 0);
+  const totalDistance30 = milesToDistance(totalMiles30, preferredDistanceUnit);
   const openAlerts = safeAlerts.filter((alert) => !alert.dismissed);
   const maxLoad = Math.max(...safeWeeklyLoads.map((row) => toNumber(row.acute_load) || 0), 1);
   const chartRows = [...safeWeeklyLoads].reverse();
@@ -297,7 +307,7 @@ export default async function RunnerDetailPage({
         </section>
 
         <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="30-Day Miles" value={totalMiles30.toFixed(1)} color="#00a7ff" />
+          <Metric label={`30-Day ${unitLabel}`} value={totalDistance30.toFixed(1)} color="#00a7ff" />
           <Metric label="ACWR" value={toNumber(latestLoad?.acwr_ratio)?.toFixed(2) || "--"} color={statusColor(latestLoad?.status || null)} />
           <Metric label="Recovery" value={latestRecovery?.hrv_status || "Missing"} color={statusColor(latestRecovery?.hrv_status || null)} />
           <Metric label="Open Alerts" value={String(openAlerts.length)} color={openAlerts.length ? "#ef4444" : "#00ff67"} />
@@ -315,17 +325,21 @@ export default async function RunnerDetailPage({
             <EmptyState text="No activities yet." />
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-              {calendarRows.map((activity) => (
+              {calendarRows.map((activity) => {
+                const distanceDisplay = milesToDistance(toNumber(activity.distance_miles) || 0, preferredDistanceUnit);
+                const paceDisplay = paceFromMiles(activity.pace_per_mile || 0, preferredDistanceUnit);
+
+                return (
                 <div key={activity.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{shortDate(activity.start_time)}</p>
-                  <p className="mt-2 text-lg font-bold text-slate-900">{(toNumber(activity.distance_miles) || 0).toFixed(1)} mi</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatPace(activity.pace_per_mile)}/mi</p>
+                  <p className="mt-2 text-lg font-bold text-slate-900">{distanceDisplay.toFixed(1)} {unitLabel}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatPace(paceDisplay)}/{unitLabel}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {activity.workout_type && <StatusPill label={activity.workout_type} color="#00a7ff" />}
                     {!activity.verified && <StatusPill label="pending" color="#f59e0b" />}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </section>
@@ -372,13 +386,17 @@ export default async function RunnerDetailPage({
           <div className="section-card p-4 sm:p-6">
             <h3 className="text-xl font-bold text-slate-900">Recent Activities</h3>
             <div className="mt-4 space-y-3">
-              {safeActivities.slice(0, 6).map((activity) => (
+              {safeActivities.slice(0, 6).map((activity) => {
+                const distanceDisplay = milesToDistance(toNumber(activity.distance_miles) || 0, preferredDistanceUnit);
+                const paceDisplay = paceFromMiles(activity.pace_per_mile || 0, preferredDistanceUnit);
+
+                return (
                 <article key={activity.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-bold text-slate-900">{shortDate(activity.start_time)}</p>
                       <p className="mt-1 text-sm text-slate-500">
-                        {(toNumber(activity.distance_miles) || 0).toFixed(2)} mi | {formatPace(activity.pace_per_mile)}/mi
+                        {distanceDisplay.toFixed(2)} {unitLabel} | {formatPace(paceDisplay)}/{unitLabel}
                       </p>
                     </div>
                     <ActivityAppBadge app={activity.detected_app} />
@@ -390,7 +408,7 @@ export default async function RunnerDetailPage({
                   </div>
                   {activity.notes && <p className="mt-3 text-sm text-slate-600">{activity.notes}</p>}
                 </article>
-              ))}
+              )})}
               {safeActivities.length === 0 && <EmptyState text="No recent activities." />}
             </div>
           </div>

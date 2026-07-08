@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
+import { normalizeDistanceUnit } from "@/lib/distance-units";
 
 async function saveCoachProfile(formData: FormData) {
   "use server";
@@ -12,6 +13,7 @@ async function saveCoachProfile(formData: FormData) {
 
   const name = (formData.get("name") as string)?.trim();
   const schoolName = (formData.get("schoolName") as string)?.trim();
+  const preferredDistanceUnit = normalizeDistanceUnit(formData.get("preferredDistanceUnit"));
 
   if (!name) {
     redirect("/settings?error=Coach%20name%20is%20required.");
@@ -28,6 +30,7 @@ async function saveCoachProfile(formData: FormData) {
     clerk_id: userId,
     name,
     school_name: schoolName || null,
+    preferred_distance_unit: preferredDistanceUnit,
   };
 
   const { error } = existingCoach?.id
@@ -59,7 +62,7 @@ export default async function CoachSettingsPage({
 
   const { data: coach, error } = await supabase
     .from("coaches")
-    .select("id, name, school_name")
+    .select("id, name, school_name, preferred_distance_unit")
     .eq("clerk_id", userId)
     .single();
 
@@ -110,6 +113,21 @@ export default async function CoachSettingsPage({
               placeholder="Central High Cross Country"
               className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Default Distance Unit</label>
+            <select
+              name="preferredDistanceUnit"
+              defaultValue={normalizeDistanceUnit(coach?.preferred_distance_unit)}
+              className="w-full rounded-lg border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 transition-colors focus:border-[#00a7ff] focus:outline-none"
+            >
+              <option value="miles">Miles</option>
+              <option value="kilometers">Kilometers</option>
+            </select>
+            <p className="mt-1 text-sm text-slate-500">
+              Runs are stored in miles for now. Runner entry and summaries can display your preferred unit.
+            </p>
           </div>
 
           <button type="submit" className="w-full rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-4 py-3 text-lg font-bold text-white transition hover:shadow-lg hover:shadow-[#00a7ff]/25">

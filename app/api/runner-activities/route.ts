@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getRunnerSession } from "@/lib/runner-session";
+import { distanceToMiles, normalizeDistanceUnit, paceToMiles } from "@/lib/distance-units";
 
 function parseNumber(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return null;
@@ -39,15 +40,18 @@ export async function POST(request: Request) {
   const screenshotUrls: string[] = Array.isArray(body?.screenshotUrls)
     ? body.screenshotUrls.filter((url: unknown): url is string => typeof url === "string")
     : [];
+  const distanceUnit = normalizeDistanceUnit(body?.distanceUnit);
   const distance = parseNumber(body?.distance);
+  const distanceMiles = distance == null ? null : distanceToMiles(distance, distanceUnit);
   const durationSeconds = parseNumber(body?.durationSeconds);
-  const paceSeconds = parseNumber(body?.paceSeconds) || 0;
+  const inputPaceSeconds = parseNumber(body?.paceSeconds) || 0;
+  const paceSeconds = inputPaceSeconds > 0 ? Math.round(paceToMiles(inputPaceSeconds, distanceUnit)) : inputPaceSeconds;
   const date = parseString(body?.date);
   const rpe = parseIntegerInRange(body?.rpe, 1, 10);
   const trainingLoadInput = parseNumber(body?.trainingLoad);
   const trainingLoad = trainingLoadInput ?? (durationSeconds != null && rpe != null ? (durationSeconds / 60) * rpe * 0.6 : null);
 
-  if (!screenshotUrls.length || distance == null || durationSeconds == null || !date) {
+  if (distanceMiles == null || durationSeconds == null || !date) {
     return NextResponse.json({ error: "Missing run details" }, { status: 400 });
   }
 
@@ -59,13 +63,13 @@ export async function POST(request: Request) {
   const { error } = await supabaseAdmin.from("activities").insert({
     runner_id: session.runnerId,
     garmin_activity_id: `manual_${Date.now()}`,
-    distance_miles: distance,
+    distance_miles: distanceMiles,
     duration_seconds: durationSeconds,
     pace_per_mile: paceSeconds,
     start_time: new Date(date).toISOString(),
     verified: false,
     uploaded_by: "runner",
-    file_type: "screenshot",
+    file_type: screenshotUrls.length > 0 ? "screenshot" : "manual",
     screenshot_urls: screenshotUrls,
     detected_app: parseString(body?.detectedApp) || null,
     raw_distance: parseString(body?.rawDistance) || null,
