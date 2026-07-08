@@ -67,6 +67,59 @@ alter table public.workout_templates alter column team_id set not null;
 alter table public.workout_assignments alter column team_id set not null;
 alter table public.coach_alerts alter column team_id set not null;
 
+with ranked_groups as (
+  select
+    id,
+    first_value(id) over (
+      partition by team_id, name
+      order by created_at asc, id asc
+    ) as keep_group_id,
+    row_number() over (
+      partition by team_id, name
+      order by created_at asc, id asc
+    ) as group_rank
+  from public.runner_groups
+),
+duplicate_memberships as (
+  select
+    ranked_groups.keep_group_id,
+    runner_group_members.runner_id
+  from ranked_groups
+  join public.runner_group_members
+    on runner_group_members.group_id = ranked_groups.id
+  where ranked_groups.group_rank > 1
+),
+inserted_memberships as (
+  insert into public.runner_group_members (group_id, runner_id)
+  select distinct keep_group_id, runner_id
+  from duplicate_memberships
+  where not exists (
+    select 1
+    from public.runner_group_members existing
+    where existing.group_id = duplicate_memberships.keep_group_id
+      and existing.runner_id = duplicate_memberships.runner_id
+  )
+  returning group_id, runner_id
+)
+delete from public.runner_group_members
+using ranked_groups
+where runner_group_members.group_id = ranked_groups.id
+  and ranked_groups.group_rank > 1;
+
+with ranked_groups as (
+  select
+    id,
+    row_number() over (
+      partition by team_id, name
+      order by created_at asc, id asc
+    ) as group_rank
+  from public.runner_groups
+)
+delete from public.runner_groups
+using ranked_groups
+where runner_groups.id = ranked_groups.id
+  and ranked_groups.group_rank > 1;
+
 alter table public.runner_groups
   drop constraint if exists runner_groups_coach_id_name_key;
 
