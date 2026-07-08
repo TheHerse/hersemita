@@ -18,60 +18,101 @@ export default function RunnerTrendChart({ activities, unitLabel = "mi" }: { act
       return Math.max(latest, new Date(activity.start_time).getTime());
     }, 0);
 
-    const last7Days = activities.filter(a => {
-      const daysAgo = (latestActivityTime - new Date(a.start_time).getTime()) / (1000 * 60 * 60 * 24);
-      return daysAgo <= 7 && a.verified;
+    if (!latestActivityTime) {
+      return [];
+    }
+
+    const start = new Date(latestActivityTime);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 13);
+
+    const latestEnd = new Date(latestActivityTime);
+    latestEnd.setHours(23, 59, 59, 999);
+
+    const recentActivities = activities.filter(a => {
+      const time = new Date(a.start_time).getTime();
+      return time >= start.getTime() && time <= latestEnd.getTime() && a.verified;
     });
 
-    const dailyData = last7Days.reduce((acc, activity) => {
-      const date = new Date(activity.start_time).toLocaleDateString('en-US', { weekday: 'short' });
-      if (!acc[date]) acc[date] = { distance: 0, count: 0 };
-      acc[date].distance += activity.distance_miles;
-      acc[date].count += 1;
+    const dailyData = recentActivities.reduce((acc, activity) => {
+      const date = new Date(activity.start_time);
+      date.setHours(0, 0, 0, 0);
+      const key = date.toISOString();
+      acc[key] = acc[key] || { distance: 0, count: 0 };
+      acc[key].distance += activity.distance_miles;
+      acc[key].count += 1;
       return acc;
     }, {} as Record<string, { distance: number; count: number }>);
 
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = latestActivityTime ? new Date(latestActivityTime).getDay() : 0;
-    const orderedDays = [...days.slice(today + 1), ...days.slice(0, today + 1)].slice(-7);
-
-    return orderedDays.map(day => ({
-      day,
-      distance: dailyData[day]?.distance || 0,
-      count: dailyData[day]?.count || 0
-    }));
+    return Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const key = date.toISOString();
+      return {
+        day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        distance: dailyData[key]?.distance || 0,
+        count: dailyData[key]?.count || 0,
+      };
+    });
   }, [activities]);
 
   const maxDistance = Math.max(...chartData.map(d => d.distance), 1);
+  const totalDistance = chartData.reduce((sum, day) => sum + day.distance, 0);
+  const completedDays = chartData.filter(day => day.count > 0).length;
+  const totalRuns = chartData.reduce((sum, day) => sum + day.count, 0);
+  const consistency = chartData.length ? Math.round((completedDays / chartData.length) * 100) : 0;
 
   return (
     <div className="section-card p-4 sm:p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="section-icon" style={{ "--icon-color": "#00ff67" } as CSSProperties}>
-          <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="section-icon" style={{ "--icon-color": "#00ff67" } as CSSProperties}>
+            <svg className="w-4 h-4 text-[#00ff67]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13h4l3-8 4 14 3-6h4" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-xl font-semibold text-slate-900">Recent Training Volume</h3>
+            <p className="text-sm text-slate-500">Verified distance and upload consistency across the latest 14 days.</p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-xl font-semibold text-slate-900">7-Day Activity Trend</h3>
-          <p className="text-sm text-slate-500">Verified distance across the latest training week.</p>
+        <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[260px]">
+          <MiniStat label={unitLabel} value={totalDistance.toFixed(1)} />
+          <MiniStat label="Runs" value={String(totalRuns)} />
+          <MiniStat label="Days" value={`${consistency}%`} />
         </div>
       </div>
 
-      <div className="flex items-end justify-between h-40 gap-1.5 sm:h-48 sm:gap-2">
+      {chartData.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+          No verified activity data yet.
+        </div>
+      ) : (
+      <div className="flex items-end justify-between h-40 gap-1 sm:h-48 sm:gap-1.5">
         {chartData.map((data) => (
-          <div key={data.day} className="flex-1 flex flex-col items-center gap-2">
+          <div key={data.date} className="flex-1 flex min-w-0 flex-col items-center gap-2">
             <div className="w-full bg-slate-100 rounded-t-lg relative overflow-hidden border border-slate-200/60" style={{ height: '100%' }}>
               <div 
-                className="absolute bottom-0 w-full bg-gradient-to-t from-[#00a7ff] via-[#32d7d0] to-[#00ff67] transition-all duration-500 rounded-t-lg shadow-lg shadow-[#00a7ff]/15"
-                style={{ height: `${(data.distance / maxDistance) * 100}%` }}
+                className={`absolute bottom-0 w-full rounded-t-lg transition-all duration-500 ${data.count > 0 ? "bg-gradient-to-t from-[#00a7ff] via-[#32d7d0] to-[#00ff67] shadow-lg shadow-[#00a7ff]/15" : "bg-slate-200"}`}
+                style={{ height: `${data.count > 0 ? Math.max(8, (data.distance / maxDistance) * 100) : 4}%` }}
               />
             </div>
             <div className="text-xs font-medium text-slate-600">{data.day}</div>
-            <div className="text-xs text-slate-400">{data.distance.toFixed(1)} {unitLabel}</div>
+            <div className={data.count > 0 ? "text-xs text-slate-500" : "text-xs text-orange-500"}>{data.count > 0 ? `${data.distance.toFixed(1)} ${unitLabel}` : "miss"}</div>
           </div>
         ))}
       </div>
+      )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-black text-slate-900">{value}</p>
     </div>
   );
 }

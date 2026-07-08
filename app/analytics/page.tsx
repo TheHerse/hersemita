@@ -12,7 +12,7 @@ export default async function AnalyticsPage() {
   const supabase = await createServerSupabaseClient();
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, name, school_name")
+    .select("id, name, school_name, preferred_distance_unit")
     .eq("clerk_id", userId)
     .single();
 
@@ -57,6 +57,7 @@ export default async function AnalyticsPage() {
         groups={groups || []}
         memberships={memberships || []}
         activities={activities || []}
+        preferredDistanceUnit={coach?.preferred_distance_unit || "miles"}
       />
     </div>
   );

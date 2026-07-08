@@ -42,6 +42,19 @@ type CalendarAssignment = {
   targetLabel: string;
 };
 
+type CompletedActivity = {
+  id: string;
+  runnerId: string;
+  distanceMiles: number;
+  startTime: string;
+  verified: boolean;
+};
+
+type GroupMembership = {
+  groupId: string;
+  runnerId: string;
+};
+
 const STORAGE_KEY = "hersemita-workout-calendar-v1";
 const STARTER_ID_MAP: Record<string, string> = {
   "starter-easy": "11111111-1111-4111-8111-111111111111",
@@ -144,6 +157,20 @@ function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function isoDateFromValue(value: string) {
+  return isoDate(new Date(value));
+}
+
+function parseMileageRange(value: string) {
+  const numbers = value.match(/\d+(\.\d+)?/g)?.map(Number).filter((number) => Number.isFinite(number)) || [];
+  if (numbers.length >= 2) return (numbers[0] + numbers[1]) / 2;
+  return numbers[0] || 0;
+}
+
+function formatMiles(value: number) {
+  return value >= 10 ? value.toFixed(0) : value.toFixed(1);
+}
+
 function startOfWeek(date: Date) {
   const next = new Date(date);
   const day = next.getDay();
@@ -211,6 +238,8 @@ export default function WorkoutCalendarPlanner({
 }) {
   const [templates, setTemplates] = useState<WorkoutTemplate[]>(STARTER_TEMPLATES);
   const [assignments, setAssignments] = useState<CalendarAssignment[]>([]);
+  const [activities, setActivities] = useState<CompletedActivity[]>([]);
+  const [memberships, setMemberships] = useState<GroupMembership[]>([]);
   const [form, setForm] = useState<WorkoutTemplate>(EMPTY_TEMPLATE);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -246,6 +275,8 @@ export default function WorkoutCalendarPlanner({
         const remote = await response.json().catch(() => null) as {
           templates?: WorkoutTemplate[];
           assignments?: CalendarAssignment[];
+          activities?: CompletedActivity[];
+          memberships?: GroupMembership[];
           error?: string;
         } | null;
 
@@ -255,6 +286,8 @@ export default function WorkoutCalendarPlanner({
           const normalized = normalizeCalendarData(localData || { templates: STARTER_TEMPLATES, assignments: [] });
           setTemplates(normalized.templates);
           setAssignments(normalized.assignments);
+          setActivities([]);
+          setMemberships([]);
           setSelectedTemplateId("");
           setSyncStatus(remote?.error || "Run the calendar SQL, then refresh.");
           setCalendarLoaded(true);
@@ -268,6 +301,8 @@ export default function WorkoutCalendarPlanner({
 
         setTemplates(normalized.templates);
         setAssignments(normalized.assignments);
+        setActivities(remote?.activities || []);
+        setMemberships(remote?.memberships || []);
         setSelectedTemplateId("");
         setSyncStatus(hasRemoteData ? "Synced to student portal." : localData ? "Migrating saved browser calendar to Supabase..." : "Ready to sync calendar.");
         setCalendarLoaded(true);
@@ -276,6 +311,8 @@ export default function WorkoutCalendarPlanner({
         const normalized = normalizeCalendarData(localData || { templates: STARTER_TEMPLATES, assignments: [] });
         setTemplates(normalized.templates);
         setAssignments(normalized.assignments);
+        setActivities([]);
+        setMemberships([]);
         setSelectedTemplateId("");
         setSyncStatus("Calendar is in browser fallback mode.");
         setCalendarLoaded(true);
@@ -330,24 +367,68 @@ export default function WorkoutCalendarPlanner({
     return matchesType && matchesSearch;
   });
 
-  const monthlyMiles = useMemo(() => {
-    return monthDays.reduce((sum, day) => {
-      const dayAssignments = assignments.filter((assignment) => assignment.date === isoDate(day));
-      return (
-        sum +
-        dayAssignments.reduce((innerSum, assignment) => {
-          const template = templates.find((item) => item.id === assignment.templateId);
-          const firstNumber = template?.miles.match(/\d+(\.\d+)?/)?.[0];
-          return innerSum + (firstNumber ? Number(firstNumber) : 0);
-        }, 0)
-      );
-    }, 0);
-  }, [assignments, templates, monthDays]);
-
   const currentMonthAssignments = assignments.filter((assignment) => {
     const date = new Date(`${assignment.date}T00:00:00`);
     return date.getMonth() === calendarMonth.getMonth() && date.getFullYear() === calendarMonth.getFullYear();
   });
+
+  const templatesById = useMemo(() => new Map(templates.map((template) => [template.id, template])), [templates]);
+
+  const groupRunnerIds = useMemo(() => {
+    const map = new Map<string, string[]>();
+    memberships.forEach((membership) => {
+      const current = map.get(membership.groupId) || [];
+      current.push(membership.runnerId);
+      map.set(membership.groupId, current);
+    });
+    return map;
+  }, [memberships]);
+
+  const teamRunnerIds = useMemo(() => runners.map((runner) => runner.id), [runners]);
+
+  function resolveAssignmentRunnerIds(assignment: CalendarAssignment) {
+    if (assignment.targetType === "team") return teamRunnerIds;
+    if (assignment.targetType === "group") return groupRunnerIds.get(assignment.targetId) || [];
+    return assignment.targetId ? [assignment.targetId] : [];
+  }
+
+  const monthStats = useMemo(() => {
+    const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    const monthEnd = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+    const todayKey = isoDate(new Date());
+    const completedUploadKeys = new Set(activities.map((activity) => `${activity.runnerId}:${isoDateFromValue(activity.startTime)}`));
+    let plannedMiles = 0;
+    let plannedRunnerDays = 0;
+    let missedUploads = 0;
+    let upcomingSlots = 0;
+
+    currentMonthAssignments.forEach((assignment) => {
+      const template = templatesById.get(assignment.templateId);
+      const targetRunnerCount = Math.max(resolveAssignmentRunnerIds(assignment).length, 1);
+      plannedMiles += parseMileageRange(template?.miles || "") * targetRunnerCount;
+      plannedRunnerDays += targetRunnerCount;
+
+      resolveAssignmentRunnerIds(assignment).forEach((runnerId) => {
+        const key = `${runnerId}:${assignment.date}`;
+        if (assignment.date < todayKey && !completedUploadKeys.has(key)) missedUploads += 1;
+        if (assignment.date >= todayKey) upcomingSlots += 1;
+      });
+    });
+
+    const completedMiles = activities.reduce((sum, activity) => {
+      const activityDate = new Date(activity.startTime);
+      if (!activity.verified || activityDate < monthStart || activityDate >= monthEnd) return sum;
+      return sum + activity.distanceMiles;
+    }, 0);
+
+    return {
+      plannedMiles,
+      completedMiles,
+      plannedRunnerDays,
+      missedUploads,
+      upcomingSlots,
+    };
+  }, [activities, calendarMonth, currentMonthAssignments, groupRunnerIds, teamRunnerIds, templatesById]);
 
   const selectedDayAssignments = assignments.filter((assignment) => assignment.date === selectedDate);
   const selectedDateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString("en-US", {
@@ -455,10 +536,12 @@ export default function WorkoutCalendarPlanner({
             </p>
             <p className="mt-3 text-sm font-semibold text-[#7dd3fc]">{syncStatus}</p>
           </div>
-          <div className="grid grid-cols-3 gap-3 sm:min-w-[420px]">
-            <HeaderStat label="Library" value={templates.length.toString()} />
-            <HeaderStat label="This Month" value={currentMonthAssignments.length.toString()} />
-            <HeaderStat label="Miles" value={monthlyMiles.toFixed(1)} />
+          <div className="grid grid-cols-2 gap-3 sm:min-w-[560px] lg:grid-cols-5">
+            <HeaderStat label="Assigned" value={currentMonthAssignments.length.toString()} detail="workouts" />
+            <HeaderStat label="Planned" value={formatMiles(monthStats.plannedMiles)} detail="runner miles" />
+            <HeaderStat label="Completed" value={formatMiles(monthStats.completedMiles)} detail="verified miles" />
+            <HeaderStat label="Upcoming" value={monthStats.upcomingSlots.toString()} detail="runner slots" />
+            <HeaderStat label="Missed" value={monthStats.missedUploads.toString()} detail="uploads" intent={monthStats.missedUploads > 0 ? "attention" : "neutral"} />
           </div>
         </div>
       </section>
@@ -511,9 +594,13 @@ export default function WorkoutCalendarPlanner({
                   const isSelected = selectedDate === dateKey;
                   const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
                   const dayMiles = dayAssignments.reduce((sum, assignment) => {
-                    const template = templates.find((item) => item.id === assignment.templateId);
-                    const firstNumber = template?.miles.match(/\d+(\.\d+)?/)?.[0];
-                    return sum + (firstNumber ? Number(firstNumber) : 0);
+                    const template = templatesById.get(assignment.templateId);
+                    const targetRunnerCount = Math.max(resolveAssignmentRunnerIds(assignment).length, 1);
+                    return sum + parseMileageRange(template?.miles || "") * targetRunnerCount;
+                  }, 0);
+                  const completedDayMiles = activities.reduce((sum, activity) => {
+                    if (!activity.verified || isoDateFromValue(activity.startTime) !== dateKey) return sum;
+                    return sum + activity.distanceMiles;
                   }, 0);
 
                   return (
@@ -564,7 +651,12 @@ export default function WorkoutCalendarPlanner({
                         )}
                       </div>
 
-                      {dayMiles > 0 && <p className="mt-2 text-[10px] font-bold text-[#00ff67] sm:text-xs">{dayMiles.toFixed(1)} planned mi</p>}
+                      {(dayMiles > 0 || completedDayMiles > 0) && (
+                        <p className="mt-2 text-[10px] font-bold text-[#00ff67] sm:text-xs">
+                          {dayMiles > 0 ? `${formatMiles(dayMiles)} planned` : "No plan"}
+                          {completedDayMiles > 0 ? ` / ${formatMiles(completedDayMiles)} done` : ""}
+                        </p>
+                      )}
                     </button>
                   );
                 })}
@@ -1144,11 +1236,22 @@ export default function WorkoutCalendarPlanner({
   );
 }
 
-function HeaderStat({ label, value }: { label: string; value: string }) {
+function HeaderStat({
+  label,
+  value,
+  detail,
+  intent = "neutral",
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  intent?: "neutral" | "attention";
+}) {
   return (
-    <div className="rounded-xl border border-white/15 bg-white/10 p-4">
+    <div className={`rounded-xl border p-4 ${intent === "attention" ? "border-amber-300/40 bg-amber-300/10" : "border-white/15 bg-white/10"}`}>
       <p className="text-xs font-bold uppercase tracking-wide text-[#94a3b8]">{label}</p>
       <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+      {detail && <p className="mt-1 text-xs font-semibold text-slate-300">{detail}</p>}
     </div>
   );
 }

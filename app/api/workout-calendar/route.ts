@@ -27,6 +27,14 @@ type AssignmentPayload = {
   targetLabel: string;
 };
 
+type ActivityRecord = {
+  id: string;
+  runner_id: string;
+  distance_miles: number | null;
+  start_time: string;
+  verified: boolean | null;
+};
+
 async function getCoach() {
   const { userId } = await auth();
   if (!userId) return { supabase: null, coach: null };
@@ -47,7 +55,15 @@ export async function GET() {
     return NextResponse.json({ error: "Coach profile required" }, { status: 401 });
   }
 
-  const [{ data: templates, error: templateError }, { data: assignments, error: assignmentError }] = await Promise.all([
+  const since = new Date();
+  since.setFullYear(since.getFullYear() - 1);
+
+  const [
+    { data: templates, error: templateError },
+    { data: assignments, error: assignmentError },
+    { data: activities, error: activityError },
+    { data: groups, error: groupError },
+  ] = await Promise.all([
     supabase
       .from("workout_templates")
       .select("id, title, kind, miles, pace, warmup, main_set, cooldown, strength, location, notes, tags, created_at")
@@ -58,13 +74,35 @@ export async function GET() {
       .select("id, assigned_date, template_id, target_type, target_id, target_label, created_at")
       .eq("coach_id", coach.id)
       .order("assigned_date", { ascending: true }),
+    supabase
+      .from("activities")
+      .select("id, runner_id, distance_miles, start_time, verified, runners!inner(coach_id)")
+      .eq("runners.coach_id", coach.id)
+      .gte("start_time", since.toISOString())
+      .order("start_time", { ascending: false }),
+    supabase
+      .from("runner_groups")
+      .select("id")
+      .eq("coach_id", coach.id),
   ]);
 
-  if (templateError || assignmentError) {
+  if (templateError || assignmentError || activityError || groupError) {
     return NextResponse.json(
-      { error: templateError?.message || assignmentError?.message || "Calendar tables are not ready" },
+      { error: templateError?.message || assignmentError?.message || activityError?.message || groupError?.message || "Calendar tables are not ready" },
       { status: 500 }
     );
+  }
+
+  const groupIds = (groups || []).map((group) => group.id);
+  const { data: memberships, error: membershipError } = groupIds.length
+    ? await supabase
+        .from("runner_group_members")
+        .select("group_id, runner_id")
+        .in("group_id", groupIds)
+    : { data: [], error: null };
+
+  if (membershipError) {
+    return NextResponse.json({ error: membershipError.message }, { status: 500 });
   }
 
   return NextResponse.json({
@@ -90,6 +128,17 @@ export async function GET() {
       targetType: assignment.target_type,
       targetId: assignment.target_id,
       targetLabel: assignment.target_label || assignment.target_id,
+    })),
+    activities: ((activities || []) as ActivityRecord[]).map((activity) => ({
+      id: activity.id,
+      runnerId: activity.runner_id,
+      distanceMiles: Number(activity.distance_miles || 0),
+      startTime: activity.start_time,
+      verified: Boolean(activity.verified),
+    })),
+    memberships: (memberships || []).map((membership) => ({
+      groupId: membership.group_id,
+      runnerId: membership.runner_id,
     })),
   });
 }
