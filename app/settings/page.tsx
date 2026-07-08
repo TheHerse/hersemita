@@ -1,8 +1,81 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
 import { normalizeDistanceUnit } from "@/lib/distance-units";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getCurrentTeamContext, getTeamMembers } from "@/lib/team-context";
+
+function displayCoachEmail(email: string | null, clerkId: string | null) {
+  if (!email || email === clerkId || email.startsWith("user_")) return "No email saved";
+  return email;
+}
+
+function appBaseUrl() {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "https://www.hersemita.com";
+}
+
+function primaryEmailFromClerkUser(user: Awaited<ReturnType<typeof currentUser>>) {
+  if (!user) return "";
+  return user.emailAddresses.find((item) => item.id === user.primaryEmailAddressId)?.emailAddress || user.emailAddresses[0]?.emailAddress || "";
+}
+
+async function applyAcceptedTeamInvite(userId: string) {
+  const user = await currentUser();
+  const invite = user?.publicMetadata?.hersemitaTeamInvite as
+    | { teamId?: string; role?: "assistant_coach"; invitedByCoachId?: string }
+    | undefined;
+
+  if (!user || !invite?.teamId || invite.role !== "assistant_coach") return;
+
+  const assistantName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Assistant Coach";
+  const primaryEmail = primaryEmailFromClerkUser(user) || userId;
+
+  const { data: existingCoach } = await supabaseAdmin
+    .from("coaches")
+    .select("id")
+    .eq("clerk_id", userId)
+    .maybeSingle();
+
+  const { data: coach } = existingCoach?.id
+    ? await supabaseAdmin
+        .from("coaches")
+        .update({
+          email: primaryEmail,
+          name: assistantName,
+          active_team_id: invite.teamId,
+        })
+        .eq("id", existingCoach.id)
+        .select("id")
+        .single()
+    : await supabaseAdmin
+        .from("coaches")
+        .insert({
+          email: primaryEmail,
+          clerk_id: userId,
+          name: assistantName,
+          active_team_id: invite.teamId,
+        })
+        .select("id")
+        .single();
+
+  if (!coach?.id) return;
+
+  await supabaseAdmin
+    .from("team_coach_memberships")
+    .upsert(
+      {
+        team_id: invite.teamId,
+        coach_id: coach.id,
+        role: "assistant_coach",
+        status: "active",
+      },
+      { onConflict: "team_id,coach_id" }
+    );
+}
 
 async function saveCoachProfile(formData: FormData) {
   "use server";
@@ -49,22 +122,148 @@ async function saveCoachProfile(formData: FormData) {
   redirect("/settings?saved=1");
 }
 
+async function addAssistantCoach(formData: FormData) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") {
+    redirect("/settings?teamError=Only%20head%20coaches%20can%20add%20assistant%20coaches.");
+  }
+
+  const email = ((formData.get("assistantEmail") as string) || "").trim().toLowerCase();
+  if (!email) redirect("/settings?teamError=Assistant%20email%20is%20required.");
+
+  const client = await clerkClient();
+  const users = await client.users.getUserList({ emailAddress: [email], limit: 1 });
+  const user = users.data[0];
+
+  if (!user?.id) {
+    const invitation = await client.invitations.createInvitation({
+      emailAddress: email,
+      expiresInDays: 7,
+      ignoreExisting: true,
+      notify: true,
+      redirectUrl: `${appBaseUrl()}/settings`,
+      publicMetadata: {
+        hersemitaTeamInvite: {
+          teamId: context.team.id,
+          role: "assistant_coach",
+          invitedByCoachId: context.coach.id,
+        },
+      },
+    });
+
+    if (!invitation?.id) {
+      redirect(`/settings?teamError=${encodeURIComponent("Could not send the assistant coach invitation.")}`);
+    }
+
+    redirect("/settings?teamInvited=1");
+  }
+
+  if (user.id === userId) {
+    redirect("/settings?teamError=You%20are%20already%20the%20head%20coach%20for%20this%20team.");
+  }
+
+  const assistantName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Assistant Coach";
+  const primaryEmail = user.emailAddresses.find((item) => item.id === user.primaryEmailAddressId)?.emailAddress || email;
+
+  const { data: existingCoach } = await supabaseAdmin
+    .from("coaches")
+    .select("id")
+    .eq("clerk_id", user.id)
+    .maybeSingle();
+
+  const { data: assistantCoach, error: coachError } = existingCoach?.id
+    ? await supabaseAdmin
+        .from("coaches")
+        .update({
+          email: primaryEmail,
+          name: assistantName,
+          active_team_id: context.team.id,
+        })
+        .eq("id", existingCoach.id)
+        .select("id")
+        .single()
+    : await supabaseAdmin
+        .from("coaches")
+        .insert({
+          email: primaryEmail,
+          clerk_id: user.id,
+          name: assistantName,
+          active_team_id: context.team.id,
+        })
+        .select("id")
+        .single();
+
+  if (coachError || !assistantCoach?.id) {
+    redirect(`/settings?teamError=${encodeURIComponent(coachError?.message || "Could not create assistant coach profile.")}`);
+  }
+
+  const { error: membershipError } = await supabaseAdmin
+    .from("team_coach_memberships")
+    .upsert(
+      {
+        team_id: context.team.id,
+        coach_id: assistantCoach.id,
+        role: "assistant_coach",
+        status: "active",
+      },
+      { onConflict: "team_id,coach_id" }
+    );
+
+  if (membershipError) {
+    redirect(`/settings?teamError=${encodeURIComponent(membershipError.message)}`);
+  }
+
+  redirect("/settings?teamSaved=1");
+}
+
+async function removeAssistantCoach(formData: FormData) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") {
+    redirect("/settings?teamError=Only%20head%20coaches%20can%20remove%20assistant%20coaches.");
+  }
+
+  const coachId = formData.get("coachId") as string;
+  if (!coachId || coachId === context.coach.id) redirect("/settings");
+
+  await supabaseAdmin
+    .from("team_coach_memberships")
+    .delete()
+    .eq("team_id", context.team.id)
+    .eq("coach_id", coachId)
+    .eq("role", "assistant_coach");
+
+  redirect("/settings?teamSaved=1");
+}
+
 export default async function CoachSettingsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ saved?: string; error?: string }>;
+  searchParams?: Promise<{ saved?: string; error?: string; teamSaved?: string; teamInvited?: string; teamError?: string }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
   const params = await searchParams;
+  await applyAcceptedTeamInvite(userId);
 
   const { data: coach, error } = await supabase
     .from("coaches")
     .select("id, name, school_name, preferred_distance_unit")
     .eq("clerk_id", userId)
     .single();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamMembers = teamContext ? await getTeamMembers(teamContext.team.id) : [];
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
@@ -88,6 +287,24 @@ export default async function CoachSettingsPage({
         {params?.saved && (
           <div className="mb-6 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm text-green-100">
             Coach profile saved.
+          </div>
+        )}
+
+        {params?.teamSaved && (
+          <div className="mb-6 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm text-green-100">
+            Team access updated.
+          </div>
+        )}
+
+        {params?.teamInvited && (
+          <div className="mb-6 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm text-green-100">
+            Assistant coach invitation sent. It expires in 7 days.
+          </div>
+        )}
+
+        {params?.teamError && (
+          <div className="mb-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-100">
+            {params.teamError}
           </div>
         )}
 
@@ -134,6 +351,64 @@ export default async function CoachSettingsPage({
             Save Profile
           </button>
         </form>
+
+        <section className="mt-8 rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-xl font-bold">Team Access</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {teamContext
+                  ? `${teamContext.team.name} / ${teamContext.role === "head_coach" ? "Head coach" : "Assistant coach"}`
+                  : "Team access is not set up for this account yet."}
+              </p>
+            </div>
+          </div>
+
+          {teamContext && (
+            <div className="mt-5 space-y-3">
+              {teamMembers.map((member) => (
+                <div key={member.coach_id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-bold text-slate-900">{member.coach?.name || "Coach"}</p>
+                    <p className="mt-1 text-sm text-slate-500">{displayCoachEmail(member.coach?.email || null, member.coach?.clerk_id || null)}</p>
+                    <p className="mt-1 text-xs font-bold uppercase tracking-wide text-[#007ab8]">
+                      {member.role === "head_coach" ? "Head Coach" : "Assistant Coach"}
+                    </p>
+                  </div>
+                  {teamContext.role === "head_coach" && member.role === "assistant_coach" && (
+                    <form action={removeAssistantCoach}>
+                      <input type="hidden" name="coachId" value={member.coach_id} />
+                      <button type="submit" className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100">
+                        Remove
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {teamContext?.role === "head_coach" && (
+            <form action={addAssistantCoach} className="mt-6 rounded-lg border border-[#00a7ff]/20 bg-[#00a7ff]/5 p-4">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Add Assistant Coach</label>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  name="assistantEmail"
+                  type="email"
+                  required
+                  placeholder="assistant@example.com"
+                  className="min-w-0 flex-1 rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+                />
+                <button type="submit" className="rounded-lg bg-slate-900 px-5 py-3 font-bold text-white transition hover:bg-slate-800">
+                  Add
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-slate-500">
+                If they do not have a Hersemita account yet, they will receive an email invitation that expires in 7 days.
+              </p>
+            </form>
+          )}
+        </section>
       </main>
     </div>
   );
