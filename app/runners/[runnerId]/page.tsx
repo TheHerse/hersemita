@@ -7,6 +7,7 @@ import CoachHeader from "@/components/CoachHeader";
 import { formatPace } from "@/lib/activity-format";
 import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 type RunnerRecord = {
   id: string;
@@ -78,15 +79,13 @@ type AlertRecord = {
   created_at: string | null;
 };
 
-async function getCoachId(userId: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
-
-  return coach?.id as string | undefined;
+async function getTeamAccess(userId: string) {
+  const context = await getCurrentTeamContext(userId);
+  return {
+    coachId: context?.team.owner_coach_id || context?.coach.id,
+    teamId: context?.team.id,
+    distanceUnit: context?.team.default_distance_unit || context?.coach.id,
+  };
 }
 
 async function addInjury(runnerId: string, formData: FormData) {
@@ -95,14 +94,14 @@ async function addInjury(runnerId: string, formData: FormData) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners");
+  const { teamId } = await getTeamAccess(userId);
+  if (!teamId) redirect("/runners");
 
   const { data: runner } = await supabase
     .from("runners")
     .select("id")
     .eq("id", runnerId)
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .single();
 
   if (!runner?.id) redirect("/runners");
@@ -137,14 +136,14 @@ async function dismissAlert(alertId: string, runnerId: string) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners");
+  const { teamId } = await getTeamAccess(userId);
+  if (!teamId) redirect("/runners");
 
   const { error } = await supabase
     .from("coach_alerts")
     .update({ dismissed: true })
     .eq("id", alertId)
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .eq("runner_id", runnerId);
 
   if (error) throw new Error(error.message);
@@ -196,15 +195,16 @@ export default async function RunnerDetailPage({
 
   const { runnerId } = await params;
   const supabase = await createServerSupabaseClient();
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners");
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
+  if (!teamId) redirect("/runners");
 
   const { data: coach } = await supabase
     .from("coaches")
     .select("preferred_distance_unit")
-    .eq("id", coachId)
+    .eq("id", teamContext.coach.id)
     .single();
-  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const preferredDistanceUnit = normalizeDistanceUnit(teamContext.team.default_distance_unit || coach?.preferred_distance_unit);
   const unitLabel = distanceUnitLabel(preferredDistanceUnit);
 
   const [
@@ -219,7 +219,7 @@ export default async function RunnerDetailPage({
       .from("runners")
       .select("id, first_name, last_name, grade, parent_phone, username, access_code")
       .eq("id", runnerId)
-      .eq("coach_id", coachId)
+      .eq("team_id", teamId)
       .single(),
     supabase
       .from("activities")
@@ -248,7 +248,7 @@ export default async function RunnerDetailPage({
       .from("coach_alerts")
       .select("id, alert_type, message, severity, dismissed, created_at")
       .eq("runner_id", runnerId)
-      .eq("coach_id", coachId)
+      .eq("team_id", teamId)
       .order("created_at", { ascending: false })
       .limit(20),
   ]);

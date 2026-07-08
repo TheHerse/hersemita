@@ -6,6 +6,7 @@ import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import { formatPace } from "@/lib/activity-format";
 import { distanceToMiles, distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles, paceToMiles } from "@/lib/distance-units";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 function nullableNumber(value: FormDataEntryValue | null) {
   if (typeof value !== "string" || value.trim() === "") return null;
@@ -19,28 +20,24 @@ function workoutTypeValue(value: FormDataEntryValue | null) {
   return allowed.has(value) ? value : null;
 }
 
-function nestedCoach(activity: any) {
-  const runner = Array.isArray(activity?.runners) ? activity.runners[0] : activity?.runners;
-  return Array.isArray(runner?.coaches) ? runner.coaches[0] : runner?.coaches;
-}
-
 async function updateActivity(activityId: string, formData: FormData) {
   "use server";
 
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
 
   const { data: activity } = await supabase
     .from("activities")
-    .select("id, duration_seconds, runners!inner(coach_id, coaches!inner(clerk_id, preferred_distance_unit))")
+    .select("id, duration_seconds, runners!inner(team_id)")
     .eq("id", activityId)
-    .eq("runners.coaches.clerk_id", userId)
+    .eq("runners.team_id", teamId)
     .single();
 
   if (!activity?.id) redirect("/activities");
-  const coach = nestedCoach(activity);
-  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const preferredDistanceUnit = normalizeDistanceUnit(teamContext?.team.default_distance_unit);
 
   const distance = parseFloat(formData.get("distance") as string);
   const paceMinutes = parseInt(formData.get("paceMinutes") as string) || 0;
@@ -86,6 +83,8 @@ export default async function EditActivityPage({
   const supabase = await createServerSupabaseClient();
 
   const { activityId } = await params;
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
 
   const { data: activity } = await supabase
     .from("activities")
@@ -95,18 +94,16 @@ export default async function EditActivityPage({
         id,
         first_name,
         last_name,
-        coach_id,
-        coaches!inner(clerk_id, preferred_distance_unit)
+        team_id
       )
     `)
     .eq("id", activityId)
-    .eq("runners.coaches.clerk_id", userId)
+    .eq("runners.team_id", teamId)
     .single();
 
   if (!activity) redirect("/activities");
 
-  const coach = nestedCoach(activity);
-  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const preferredDistanceUnit = normalizeDistanceUnit(teamContext?.team.default_distance_unit);
   const unitLabel = distanceUnitLabel(preferredDistanceUnit);
   const distanceDisplay = milesToDistance(Number(activity.distance_miles || 0), preferredDistanceUnit);
   const paceDisplaySeconds = paceFromMiles(Number(activity.pace_per_mile || 0), preferredDistanceUnit);

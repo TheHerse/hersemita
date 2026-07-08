@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 type AssignmentRecord = {
   id: string;
   coach_id: string;
+  team_id: string;
   assigned_date: string;
   target_type: "team" | "group" | "runner";
   target_id: string;
@@ -30,6 +31,7 @@ type AssignmentQueryRecord = Omit<AssignmentRecord, "workout_templates"> & {
 type RunnerRecord = {
   id: string;
   coach_id: string;
+  team_id: string;
   first_name: string;
   last_name: string;
 };
@@ -80,7 +82,7 @@ async function scanMissedWorkouts(request: Request) {
 
   const { data: assignments, error: assignmentError } = await supabaseAdmin
     .from("workout_assignments")
-    .select("id, coach_id, assigned_date, target_type, target_id, target_label, workout_templates(title, kind)")
+    .select("id, coach_id, team_id, assigned_date, target_type, target_id, target_label, workout_templates(title, kind)")
     .gte("assigned_date", startDate)
     .lt("assigned_date", endDate)
     .order("assigned_date", { ascending: true });
@@ -99,7 +101,7 @@ async function scanMissedWorkouts(request: Request) {
     return NextResponse.json({ ok: true, scannedAssignments: 0, insertedAlerts: 0 });
   }
 
-  const coachIds = [...new Set(safeAssignments.map((assignment) => assignment.coach_id))];
+  const teamIds = [...new Set(safeAssignments.map((assignment) => assignment.team_id).filter(Boolean))];
   const groupIds = [
     ...new Set(
       safeAssignments
@@ -111,8 +113,8 @@ async function scanMissedWorkouts(request: Request) {
   const [{ data: runners, error: runnerError }, { data: memberships, error: membershipError }] = await Promise.all([
     supabaseAdmin
       .from("runners")
-      .select("id, coach_id, first_name, last_name")
-      .in("coach_id", coachIds),
+      .select("id, coach_id, team_id, first_name, last_name")
+      .in("team_id", teamIds),
     groupIds.length
       ? supabaseAdmin
           .from("runner_group_members")
@@ -127,14 +129,14 @@ async function scanMissedWorkouts(request: Request) {
 
   const safeRunners = (runners || []) as RunnerRecord[];
   const safeMemberships = (memberships || []) as MembershipRecord[];
-  const runnersByCoach = new Map<string, RunnerRecord[]>();
+  const runnersByTeam = new Map<string, RunnerRecord[]>();
   const runnersById = new Map(safeRunners.map((runner) => [runner.id, runner]));
   const groupMembers = new Map<string, string[]>();
 
   safeRunners.forEach((runner) => {
-    const current = runnersByCoach.get(runner.coach_id) || [];
+    const current = runnersByTeam.get(runner.team_id) || [];
     current.push(runner);
-    runnersByCoach.set(runner.coach_id, current);
+    runnersByTeam.set(runner.team_id, current);
   });
 
   safeMemberships.forEach((membership) => {
@@ -145,7 +147,7 @@ async function scanMissedWorkouts(request: Request) {
 
   const assignedRunnerIds = new Set<string>();
   safeAssignments.forEach((assignment) => {
-    resolveTargetRunnerIds(assignment, runnersByCoach, groupMembers).forEach((runnerId) => assignedRunnerIds.add(runnerId));
+    resolveTargetRunnerIds(assignment, runnersByTeam, groupMembers).forEach((runnerId) => assignedRunnerIds.add(runnerId));
   });
 
   const { data: activities, error: activityError } = assignedRunnerIds.size
@@ -166,7 +168,7 @@ async function scanMissedWorkouts(request: Request) {
   );
 
   const alertRows = safeAssignments.flatMap((assignment) => {
-    const runnerIds = resolveTargetRunnerIds(assignment, runnersByCoach, groupMembers);
+    const runnerIds = resolveTargetRunnerIds(assignment, runnersByTeam, groupMembers);
     return runnerIds.flatMap((runnerId) => {
       if (completedKeys.has(`${runnerId}:${assignment.assigned_date}`)) return [];
 
@@ -177,6 +179,7 @@ async function scanMissedWorkouts(request: Request) {
       return {
         runner_id: runnerId,
         coach_id: assignment.coach_id,
+        team_id: assignment.team_id,
         alert_type: "missed_workout",
         message: `${runnerName} has no uploaded activity for ${workoutName} on ${assignment.assigned_date}.`,
         severity: "medium",
@@ -213,11 +216,11 @@ async function scanMissedWorkouts(request: Request) {
 
 function resolveTargetRunnerIds(
   assignment: AssignmentRecord,
-  runnersByCoach: Map<string, RunnerRecord[]>,
+  runnersByTeam: Map<string, RunnerRecord[]>,
   groupMembers: Map<string, string[]>
 ) {
   if (assignment.target_type === "team") {
-    return (runnersByCoach.get(assignment.coach_id) || []).map((runner) => runner.id);
+    return (runnersByTeam.get(assignment.team_id) || []).map((runner) => runner.id);
   }
 
   if (assignment.target_type === "group") {

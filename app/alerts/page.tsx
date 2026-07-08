@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import CoachHeader from "@/components/CoachHeader";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 type AlertRecord = {
   id: string;
@@ -32,15 +33,9 @@ type AlertQueryRecord = Omit<AlertRecord, "runners"> & {
     | null;
 };
 
-async function getCoachId(userId: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
-
-  return coach?.id as string | undefined;
+async function getTeamId(userId: string) {
+  const context = await getCurrentTeamContext(userId);
+  return context?.team.id;
 }
 
 async function dismissAlert(alertId: string) {
@@ -49,14 +44,14 @@ async function dismissAlert(alertId: string) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/alerts");
+  const teamId = await getTeamId(userId);
+  if (!teamId) redirect("/alerts");
 
   const { error } = await supabase
     .from("coach_alerts")
     .update({ dismissed: true })
     .eq("id", alertId)
-    .eq("coach_id", coachId);
+    .eq("team_id", teamId);
 
   if (error) throw new Error(error.message);
 
@@ -69,13 +64,13 @@ async function dismissAllAlerts() {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/alerts");
+  const teamId = await getTeamId(userId);
+  if (!teamId) redirect("/alerts");
 
   const { error } = await supabase
     .from("coach_alerts")
     .update({ dismissed: true })
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .eq("dismissed", false);
 
   if (error) throw new Error(error.message);
@@ -108,13 +103,13 @@ export default async function AlertsPage() {
   if (!userId) redirect("/");
 
   const supabase = await createServerSupabaseClient();
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/dashboard");
+  const teamId = await getTeamId(userId);
+  if (!teamId) redirect("/dashboard");
 
   const { data: alerts } = await supabase
     .from("coach_alerts")
     .select("id, runner_id, alert_type, message, severity, dismissed, created_at, runners(first_name, last_name)")
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .order("dismissed", { ascending: true })
     .order("created_at", { ascending: false })
     .limit(100);

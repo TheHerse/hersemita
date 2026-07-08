@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,8 @@ export async function GET(request: Request) {
   );
 
   const supabase = await createServerSupabaseClient();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, preferred_distance_unit")
@@ -57,7 +60,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Coach profile not found" }, { status: 404 });
   }
 
-  const preferredDistanceUnit = normalizeDistanceUnit(coach.preferred_distance_unit);
+  const preferredDistanceUnit = normalizeDistanceUnit(teamContext?.team.default_distance_unit || coach.preferred_distance_unit);
   const unitLabel = distanceUnitLabel(preferredDistanceUnit);
 
   let query = supabase
@@ -91,10 +94,10 @@ export async function GET(request: Request) {
         last_name,
         grade,
         username,
-        coach_id
+        team_id
       )
     `)
-    .eq("runners.coach_id", coach.id)
+    .eq("runners.team_id", teamId)
     .order("start_time", { ascending: false });
 
   if (verifiedOnly) {

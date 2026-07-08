@@ -5,6 +5,7 @@ import Link from "next/link";
 import { sendMassSMS } from "@/lib/twilio";
 import CoachHeader from "@/components/CoachHeader";
 import MessageParentsForm from "@/components/MessageParentsForm";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 async function sendMessage(formData: FormData) {
   "use server";
@@ -12,6 +13,8 @@ async function sendMessage(formData: FormData) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
   
   const { data: coach } = await supabase
     .from("coaches")
@@ -22,14 +25,6 @@ async function sendMessage(formData: FormData) {
   if (!coach?.id) {
     redirect("/settings?error=Coach%20profile%20not%20found.");
   }
-
-  const { data: coachProfile } = coach?.id
-    ? await supabase
-        .from("coaches")
-        .select("school_name")
-        .eq("id", coach.id)
-        .single()
-    : { data: null };
   
   const message = formData.get("message") as string;
   const messageType = formData.get("type") as string;
@@ -42,7 +37,7 @@ async function sendMessage(formData: FormData) {
   const { data: runners } = await supabase
     .from("runners")
     .select("first_name, last_name, parent_phone")
-    .eq("coach_id", coach.id)
+    .eq("team_id", teamId)
     .in("id", selectedRunners)
     .not("parent_phone", "is", null);
   
@@ -54,7 +49,7 @@ async function sendMessage(formData: FormData) {
 
   const result = await sendMassSMS(
     phones,
-    `${coachProfile?.school_name ? `${coachProfile.school_name} - ` : ""}Coach ${coach?.name || ""}: ${message}`.trim()
+    `${teamContext?.team.school_name || teamContext?.team.name ? `${teamContext?.team.school_name || teamContext?.team.name} - ` : ""}Coach ${coach?.name || ""}: ${message}`.trim()
   );
   
   const status = result.success ? "sent" : result.mock ? "mock" : "error";
@@ -70,6 +65,8 @@ export default async function MessageParentsPage({
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
   const params = await searchParams;
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
 
   const { data: coach } = await supabase
     .from("coaches")
@@ -81,7 +78,7 @@ export default async function MessageParentsPage({
     ? await supabase
         .from("runners")
         .select("id, first_name, last_name, grade, parent_phone")
-        .eq("coach_id", coach.id)
+        .eq("team_id", teamId)
         .order("last_name", { ascending: true })
     : { data: [] };
 

@@ -12,6 +12,7 @@ import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import TrainingLoadRecoveryPanel from "@/components/TrainingLoadRecoveryPanel";
 import type { LoadRecoveryRow } from "@/components/TrainingLoadRecoveryPanel";
 import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 type PaceTrend = 'improving' | 'declining' | 'stable';
 
@@ -69,12 +70,14 @@ async function verifyActivity(activityId: string) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
+  const context = await getCurrentTeamContext(userId);
+  const teamId = context?.team.id;
   
   const { data: activity } = await supabase
     .from("activities")
-    .select("id, runners!inner(coach_id, coaches!inner(clerk_id))")
+    .select("id, runners!inner(team_id)")
     .eq("id", activityId)
-    .eq("runners.coaches.clerk_id", userId)
+    .eq("runners.team_id", teamId)
     .single();
   
   if (!activity?.id) redirect("/dashboard");
@@ -93,27 +96,21 @@ export default async function DashboardPage() {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
 
   const { data: coach } = await supabase
     .from("coaches")
     .select("id, name, preferred_distance_unit")
     .eq("clerk_id", userId)
     .single();
-  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const preferredDistanceUnit = normalizeDistanceUnit(teamContext?.team.default_distance_unit || coach?.preferred_distance_unit);
   const unitLabel = distanceUnitLabel(preferredDistanceUnit);
-
-  const { data: coachProfile } = coach?.id
-    ? await supabase
-        .from("coaches")
-        .select("school_name")
-        .eq("id", coach.id)
-        .single()
-    : { data: null };
 
   const { data: runners } = await supabase
     .from("runners")
     .select("*")
-    .eq("coach_id", coach?.id);
+    .eq("team_id", teamId);
 
   // Make sure to select the new columns from Supabase
   const { data: activities } = await supabase
@@ -124,28 +121,29 @@ export default async function DashboardPage() {
         id,
         first_name,
         last_name,
-        parent_phone
+        parent_phone,
+        team_id
       )
     `)
-    .eq("runners.coach_id", coach?.id)
+    .eq("runners.team_id", teamId)
     .order("start_time", { ascending: false });
 
-  const [{ data: weeklyLoads }, { data: recoveryLogs }, { data: coachAlerts }] = coach?.id
+  const [{ data: weeklyLoads }, { data: recoveryLogs }, { data: coachAlerts }] = teamId
     ? await Promise.all([
         supabase
           .from("weekly_loads")
-          .select("runner_id, week_start, acute_load, chronic_load, acwr_ratio, monotony, strain, status, runners!inner(coach_id)")
-          .eq("runners.coach_id", coach.id)
+          .select("runner_id, week_start, acute_load, chronic_load, acwr_ratio, monotony, strain, status, runners!inner(team_id)")
+          .eq("runners.team_id", teamId)
           .order("week_start", { ascending: false }),
         supabase
           .from("recovery_logs")
-          .select("runner_id, log_date, hrv_ms, hrv_status, resting_hr, sleep_score, soreness, illness, runners!inner(coach_id)")
-          .eq("runners.coach_id", coach.id)
+          .select("runner_id, log_date, hrv_ms, hrv_status, resting_hr, sleep_score, soreness, illness, runners!inner(team_id)")
+          .eq("runners.team_id", teamId)
           .order("log_date", { ascending: false }),
         supabase
           .from("coach_alerts")
           .select("runner_id, alert_type, severity, dismissed, created_at")
-          .eq("coach_id", coach.id)
+          .eq("team_id", teamId)
           .eq("dismissed", false)
           .order("created_at", { ascending: false }),
       ])
@@ -328,7 +326,7 @@ export default async function DashboardPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
             <div>
               <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
-                {coachProfile?.school_name || "Coach Dashboard"}
+                {teamContext?.team.school_name || teamContext?.team.name || "Coach Dashboard"}
               </h2>
               <p className="text-slate-500 mt-1">
                 {coach?.name ? `${coach.name} / ` : ""}Track, verify, and analyze your team&apos;s performance

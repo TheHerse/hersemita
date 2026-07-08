@@ -5,33 +5,31 @@ import Link from "next/link";
 import { ensureDefaultRunnerGroups } from "@/lib/runner-groups";
 import CoachHeader from "@/components/CoachHeader";
 import RosterWorkbench from "@/components/RosterWorkbench";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 export default async function RunnersPage() {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
+  const teamContext = await getCurrentTeamContext(userId);
+  const legacyCoachId = teamContext?.team.owner_coach_id || teamContext?.coach.id;
 
-  if (coach?.id) {
-    await ensureDefaultRunnerGroups(coach.id, supabase);
+  if (legacyCoachId && teamContext?.team.id) {
+    await ensureDefaultRunnerGroups(legacyCoachId, supabase, teamContext.team.id);
   }
 
   const { data: runners } = await supabase
     .from("runners")
     .select("*")
-    .eq("coach_id", coach?.id)
+    .eq("team_id", teamContext?.team.id)
     .order("first_name", { ascending: true })
     .order("last_name", { ascending: true });
 
   const { data: groups } = await supabase
     .from("runner_groups")
     .select("id, name, color")
-    .eq("coach_id", coach?.id)
+    .eq("team_id", teamContext?.team.id)
     .order("name", { ascending: true });
 
   const { data: memberships } = groups?.length

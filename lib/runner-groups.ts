@@ -29,14 +29,15 @@ export function getSolidGroupStyle(color: string) {
   };
 }
 
-export async function ensureDefaultRunnerGroups(coachId: string, client: SupabaseClient = supabase) {
+export async function ensureDefaultRunnerGroups(coachId: string, client: SupabaseClient = supabase, teamId?: string | null) {
   return client.from("runner_groups").upsert(
     DEFAULT_RUNNER_GROUPS.map((group) => ({
       coach_id: coachId,
+      team_id: teamId || null,
       name: group.name,
       color: group.color,
     })),
-    { onConflict: "coach_id,name" }
+    { onConflict: teamId ? "team_id,name" : "coach_id,name" }
   );
 }
 
@@ -46,25 +47,30 @@ export function gradeGroupName(grade: number) {
 
 export async function syncRunnerAutomaticGroups({
   coachId,
+  teamId,
   runnerId,
   grade,
   division,
   client = supabase,
 }: {
   coachId: string;
+  teamId?: string | null;
   runnerId: string;
   grade: number;
   division: RunnerDivision;
   client?: SupabaseClient;
 }) {
-  await ensureDefaultRunnerGroups(coachId, client);
+  await ensureDefaultRunnerGroups(coachId, client, teamId);
 
   const automaticNames = DEFAULT_RUNNER_GROUP_NAMES;
-  const { data: automaticGroups } = await client
+  let automaticGroupsQuery = client
     .from("runner_groups")
     .select("id, name")
-    .eq("coach_id", coachId)
     .in("name", automaticNames);
+
+  automaticGroupsQuery = teamId ? automaticGroupsQuery.eq("team_id", teamId) : automaticGroupsQuery.eq("coach_id", coachId);
+
+  const { data: automaticGroups } = await automaticGroupsQuery;
 
   const automaticGroupIds = automaticGroups?.map((group) => group.id) || [];
   const desiredGroupIds =

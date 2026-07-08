@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data: runner, error: runnerError } = await supabaseAdmin
     .from("runners")
-    .select("id, coach_id, first_name, last_name, grade, coaches(name, school_name)")
+    .select("id, team_id, first_name, last_name, grade")
     .eq("id", session.runnerId)
     .maybeSingle();
 
@@ -18,10 +18,27 @@ export async function GET() {
     return NextResponse.json({ error: "Runner not found" }, { status: 404 });
   }
 
-  const { data: memberships } = await supabaseAdmin
+  const [{ data: team }, { data: memberships }] = await Promise.all([
+    runner.team_id
+      ? supabaseAdmin
+          .from("teams")
+          .select("name, school_name, owner_coach_id")
+          .eq("id", runner.team_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabaseAdmin
     .from("runner_group_members")
     .select("group_id")
-    .eq("runner_id", session.runnerId);
+      .eq("runner_id", session.runnerId),
+  ]);
+
+  const { data: coach } = team?.owner_coach_id
+    ? await supabaseAdmin
+        .from("coaches")
+        .select("name")
+        .eq("id", team.owner_coach_id)
+        .maybeSingle()
+    : { data: null };
 
   const groupIds = (memberships || []).map((membership) => String(membership.group_id));
   const targetIds = ["team", session.runnerId, ...groupIds];
@@ -29,11 +46,9 @@ export async function GET() {
   const { data: assignments, error } = await supabaseAdmin
     .from("workout_assignments")
     .select("id, assigned_date, target_type, target_id, workout_templates(title, kind, miles, pace, warmup, main_set, cooldown, strength, location, notes, tags)")
-    .eq("coach_id", runner.coach_id)
+    .eq("team_id", runner.team_id)
     .in("target_id", targetIds)
     .order("assigned_date", { ascending: true });
-
-  const coach = Array.isArray(runner.coaches) ? runner.coaches[0] : runner.coaches;
 
   if (error) {
     return NextResponse.json({
@@ -41,7 +56,7 @@ export async function GET() {
         id: runner.id,
         name: `${runner.first_name} ${runner.last_name}`,
         grade: runner.grade,
-        schoolName: coach?.school_name || "Your school",
+        schoolName: team?.school_name || team?.name || "Your school",
         coachName: coach?.name || "Coach",
       },
       assignments: [],
@@ -55,7 +70,7 @@ export async function GET() {
       id: runner.id,
       name: `${runner.first_name} ${runner.last_name}`,
       grade: runner.grade,
-      schoolName: coach?.school_name || "Your school",
+      schoolName: team?.school_name || team?.name || "Your school",
       coachName: coach?.name || "Coach",
     },
     assignments: (assignments || []).map((assignment) => {

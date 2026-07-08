@@ -11,6 +11,7 @@ import {
   syncRunnerAutomaticGroups,
   type RunnerDivision,
 } from "@/lib/runner-groups";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 function groupColorVar(color: string) {
   return { "--group-color": color } as CSSProperties;
@@ -24,21 +25,19 @@ export default async function NewRunnerPage() {
   }
   const supabase = await createServerSupabaseClient();
 
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
+  const teamContext = await getCurrentTeamContext(userId);
+  const legacyCoachId = teamContext?.team.owner_coach_id || teamContext?.coach.id;
+  const teamId = teamContext?.team.id;
 
-  if (coach?.id) {
-    await ensureDefaultRunnerGroups(coach.id, supabase);
+  if (legacyCoachId && teamId) {
+    await ensureDefaultRunnerGroups(legacyCoachId, supabase, teamId);
   }
 
-  const { data: groups } = coach?.id
+  const { data: groups } = teamId
     ? await supabase
         .from("runner_groups")
         .select("id, name, color")
-        .eq("coach_id", coach.id)
+        .eq("team_id", teamId)
         .order("name", { ascending: true })
     : { data: [] };
 
@@ -60,41 +59,21 @@ export default async function NewRunnerPage() {
     
     const accessCode = makeAccessCode();
     const username = makeRunnerUsername(firstName, lastName);
-    
-    const { data: coachData, error: coachError } = await supabase
-      .from("coaches")
-      .select("id")
-      .eq("clerk_id", userId)
-      .single();
-    let coach = coachData;
-    
-    if (coachError && coachError.code !== 'PGRST116') {
-      console.error("Error finding coach:", coachError);
-    }
-    
-    if (!coach) {
-      const { data: newCoach, error: createError } = await supabase
-        .from("coaches")
-        .insert({ email: userId, clerk_id: userId, name: "Coach" })
-        .select()
-        .single();
-      
-      if (createError) {
-        console.error("Error creating coach:", createError);
-        return;
-      }
-      coach = newCoach;
-    }
-    
-    if (!coach?.id) {
-      console.error("Failed to get or create coach");
+
+    const teamContext = await getCurrentTeamContext(userId);
+    const legacyCoachId = teamContext?.team.owner_coach_id || teamContext?.coach.id;
+    const teamId = teamContext?.team.id;
+
+    if (!legacyCoachId || !teamId) {
+      console.error("Failed to find active team");
       return;
     }
     
     const { data: newRunner, error: runnerError } = await supabase
       .from("runners")
       .insert({
-        coach_id: coach.id,
+        coach_id: legacyCoachId,
+        team_id: teamId,
         first_name: firstName,
         last_name: lastName,
         grade,
@@ -112,7 +91,8 @@ export default async function NewRunnerPage() {
 
     if (newRunner?.id) {
       await syncRunnerAutomaticGroups({
-        coachId: coach.id,
+        coachId: legacyCoachId,
+        teamId,
         runnerId: newRunner.id,
         grade,
         division,
@@ -123,7 +103,7 @@ export default async function NewRunnerPage() {
         ? await supabase
             .from("runner_groups")
             .select("id")
-            .eq("coach_id", coach.id)
+            .eq("team_id", teamId)
             .in("id", customGroupIds)
         : { data: [] };
 

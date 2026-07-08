@@ -11,6 +11,7 @@ import {
   syncRunnerAutomaticGroups,
   type RunnerDivision,
 } from "@/lib/runner-groups";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 type Group = {
   id: string;
@@ -22,15 +23,12 @@ function groupColorVar(color: string) {
   return { "--group-color": color } as CSSProperties;
 }
 
-async function getCoachId(userId: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
-
-  return coach?.id as string | undefined;
+async function getTeamAccess(userId: string) {
+  const context = await getCurrentTeamContext(userId);
+  return {
+    coachId: context?.team.owner_coach_id || context?.coach.id,
+    teamId: context?.team.id,
+  };
 }
 
 async function updateRunner(runnerId: string, formData: FormData) {
@@ -40,8 +38,8 @@ async function updateRunner(runnerId: string, formData: FormData) {
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners");
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/runners");
 
   const firstName = (formData.get("firstName") as string)?.trim();
   const lastName = (formData.get("lastName") as string)?.trim();
@@ -54,7 +52,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
     .from("runners")
     .select("id")
     .eq("id", runnerId)
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .single();
 
   if (!runner?.id || !firstName || !lastName || !grade || !division) {
@@ -70,7 +68,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
       parent_phone: parentPhone || null,
     })
     .eq("id", runner.id)
-    .eq("coach_id", coachId);
+    .eq("team_id", teamId);
 
   if (error) {
     throw new Error(error.message);
@@ -78,6 +76,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
 
   await syncRunnerAutomaticGroups({
     coachId,
+    teamId,
     runnerId: runner.id,
     grade,
     division,
@@ -88,14 +87,14 @@ async function updateRunner(runnerId: string, formData: FormData) {
     ? await supabase
         .from("runner_groups")
         .select("id")
-        .eq("coach_id", coachId)
+        .eq("team_id", teamId)
         .in("id", customGroupIds)
     : { data: [] };
 
   const { data: allCoachGroups } = await supabase
     .from("runner_groups")
     .select("id, name")
-    .eq("coach_id", coachId);
+    .eq("team_id", teamId);
 
   const customGroupIdsForCoach =
     allCoachGroups
@@ -129,14 +128,14 @@ async function rotateRunnerCredentials(runnerId: string) {
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners");
+  const { teamId } = await getTeamAccess(userId);
+  if (!teamId) redirect("/runners");
 
   const { data: runner } = await supabase
     .from("runners")
     .select("first_name, last_name")
     .eq("id", runnerId)
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .single();
 
   if (!runner) redirect("/runners");
@@ -148,7 +147,7 @@ async function rotateRunnerCredentials(runnerId: string) {
       username: makeRunnerUsername(runner.first_name, runner.last_name),
     })
     .eq("id", runnerId)
-    .eq("coach_id", coachId);
+    .eq("team_id", teamId);
 
   if (error) {
     throw new Error(error.message);
@@ -167,22 +166,22 @@ export default async function EditRunnerPage({
   const supabase = await createServerSupabaseClient();
 
   const { runnerId } = await params;
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/runners");
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/runners");
 
-  await ensureDefaultRunnerGroups(coachId, supabase);
+  await ensureDefaultRunnerGroups(coachId, supabase, teamId);
 
   const [{ data: runner }, { data: groups }] = await Promise.all([
     supabase
       .from("runners")
       .select("id, first_name, last_name, grade, parent_phone, access_code, username")
       .eq("id", runnerId)
-      .eq("coach_id", coachId)
+      .eq("team_id", teamId)
       .single(),
     supabase
       .from("runner_groups")
       .select("id, name, color")
-      .eq("coach_id", coachId)
+      .eq("team_id", teamId)
       .order("name", { ascending: true }),
   ]);
 

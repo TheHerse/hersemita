@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { DEFAULT_RUNNER_GROUP_NAMES, ensureDefaultRunnerGroups, getSolidGroupStyle, getStripedGroupStyle } from "@/lib/runner-groups";
 import CoachHeader from "@/components/CoachHeader";
 import GroupSaveButton from "@/components/GroupSaveButton";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 const CUSTOM_GROUP_COLORS = [
   "#00a7ff",
@@ -50,15 +51,12 @@ function groupSelectionSignature(assigned: Set<string>, gradeGroups: Group[], di
   return values.sort().join("|");
 }
 
-async function getCoachId(userId: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
-
-  return coach?.id as string | undefined;
+async function getTeamAccess(userId: string) {
+  const context = await getCurrentTeamContext(userId);
+  return {
+    coachId: context?.team.owner_coach_id || context?.coach.id,
+    teamId: context?.team.id,
+  };
 }
 
 async function updateRunnerGroups(formData: FormData) {
@@ -68,8 +66,8 @@ async function updateRunnerGroups(formData: FormData) {
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/groups");
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/groups");
 
   const runnerId = formData.get("runnerId") as string;
   const gradeGroupId = formData.get("gradeGroup") as string | null;
@@ -81,7 +79,7 @@ async function updateRunnerGroups(formData: FormData) {
     .from("runners")
     .select("id")
     .eq("id", runnerId)
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .single();
 
   if (!runner?.id) redirect("/groups");
@@ -89,7 +87,7 @@ async function updateRunnerGroups(formData: FormData) {
   const { data: allowedGroups } = await supabase
     .from("runner_groups")
     .select("id, name")
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .in("id", groupIds.length ? groupIds : ["00000000-0000-0000-0000-000000000000"]);
 
   const allowedGroupIds = allowedGroups?.map((group) => group.id) || [];
@@ -101,7 +99,7 @@ async function updateRunnerGroups(formData: FormData) {
       .from("runners")
       .update({ grade: selectedGrade })
       .eq("id", runnerId)
-      .eq("coach_id", coachId);
+      .eq("team_id", teamId);
   }
 
   await supabase.from("runner_group_members").delete().eq("runner_id", runnerId);
@@ -125,10 +123,10 @@ async function createCustomGroup(formData: FormData) {
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/groups");
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/groups");
 
-  await ensureDefaultRunnerGroups(coachId, supabase);
+  await ensureDefaultRunnerGroups(coachId, supabase, teamId);
 
   const name = (formData.get("name") as string)?.trim();
   const color = (formData.get("color") as string) || CUSTOM_GROUP_COLORS[0];
@@ -140,6 +138,7 @@ async function createCustomGroup(formData: FormData) {
 
   const { error } = await supabase.from("runner_groups").insert({
     coach_id: coachId,
+    team_id: teamId,
     name,
     color,
   });
@@ -158,14 +157,14 @@ async function deleteCustomGroup(groupId: string) {
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const coachId = await getCoachId(userId);
-  if (!coachId) redirect("/groups");
+  const { teamId } = await getTeamAccess(userId);
+  if (!teamId) redirect("/groups");
 
   const { data: group } = await supabase
     .from("runner_groups")
     .select("id, name")
     .eq("id", groupId)
-    .eq("coach_id", coachId)
+    .eq("team_id", teamId)
     .single();
 
   if (!group || DEFAULT_RUNNER_GROUP_NAMES.includes(group.name)) {
@@ -176,7 +175,7 @@ async function deleteCustomGroup(groupId: string) {
     .from("runner_groups")
     .delete()
     .eq("id", group.id)
-    .eq("coach_id", coachId);
+    .eq("team_id", teamId);
 
   redirect("/groups");
 }
@@ -191,10 +190,10 @@ export default async function GroupsPage({
   const supabase = await createServerSupabaseClient();
 
   const params = await searchParams;
-  const coachId = await getCoachId(userId);
+  const { coachId, teamId } = await getTeamAccess(userId);
 
-  const { error: defaultGroupsError } = coachId
-    ? await ensureDefaultRunnerGroups(coachId, supabase)
+  const { error: defaultGroupsError } = coachId && teamId
+    ? await ensureDefaultRunnerGroups(coachId, supabase, teamId)
     : { error: null };
 
   const [{ data: groups, error: groupsError }, { data: runners }] = coachId
@@ -202,12 +201,12 @@ export default async function GroupsPage({
         supabase
           .from("runner_groups")
           .select("id, name, color")
-          .eq("coach_id", coachId)
+          .eq("team_id", teamId)
           .order("name", { ascending: true }),
         supabase
           .from("runners")
           .select("id, first_name, last_name, grade")
-          .eq("coach_id", coachId)
+          .eq("team_id", teamId)
           .order("first_name", { ascending: true })
           .order("last_name", { ascending: true }),
       ])

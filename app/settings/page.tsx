@@ -122,6 +122,7 @@ async function saveCoachProfile(formData: FormData) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
+  const context = await getCurrentTeamContext(userId);
 
   const name = (formData.get("name") as string)?.trim();
   const schoolName = (formData.get("schoolName") as string)?.trim();
@@ -141,7 +142,6 @@ async function saveCoachProfile(formData: FormData) {
     email: userId,
     clerk_id: userId,
     name,
-    school_name: schoolName || null,
     preferred_distance_unit: preferredDistanceUnit,
   };
 
@@ -156,6 +156,27 @@ async function saveCoachProfile(formData: FormData) {
 
   if (error) {
     redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+  }
+
+  if (context?.role === "head_coach") {
+    const teamName = schoolName || context.team.name || "Hersemita Team";
+    const { error: teamError } = await supabaseAdmin
+      .from("teams")
+      .update({
+        name: teamName,
+        school_name: schoolName || null,
+        default_distance_unit: preferredDistanceUnit,
+      })
+      .eq("id", context.team.id);
+
+    if (teamError) {
+      redirect(`/settings?error=${encodeURIComponent(teamError.message)}`);
+    }
+
+    await supabaseAdmin
+      .from("coaches")
+      .update({ school_name: schoolName || null })
+      .eq("id", context.coach.id);
   }
 
   redirect("/settings?saved=1");
@@ -343,7 +364,7 @@ export default async function CoachSettingsPage({
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">Coach Settings</p>
           <h2 className="mt-2 text-3xl font-bold text-white">Team Identity</h2>
           <p className="mt-2 text-[#cbd5e1]">
-            Add your coach name and school or team name so the dashboard and parent messages feel official.
+            Add your coach name and team identity so dashboards and parent messages feel official.
           </p>
         </div>
 
@@ -395,17 +416,24 @@ export default async function CoachSettingsPage({
             <input
               name="schoolName"
               type="text"
-              defaultValue={coach?.school_name || ""}
+              defaultValue={teamContext?.team.school_name || teamContext?.team.name || coach?.school_name || ""}
               placeholder="Central High Cross Country"
+              disabled={teamContext?.role === "assistant_coach"}
               className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
             />
+            {teamContext?.role === "assistant_coach" && (
+              <p className="mt-1 text-sm text-slate-500">
+                Team name is managed by the head coach. You can still update your coach display name.
+              </p>
+            )}
           </div>
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-slate-700">Default Distance Unit</label>
             <select
               name="preferredDistanceUnit"
-              defaultValue={normalizeDistanceUnit(coach?.preferred_distance_unit)}
+              defaultValue={normalizeDistanceUnit(teamContext?.team.default_distance_unit || coach?.preferred_distance_unit)}
+              disabled={teamContext?.role === "assistant_coach"}
               className="w-full rounded-lg border-2 border-slate-200 bg-white px-4 py-3 text-slate-900 transition-colors focus:border-[#00a7ff] focus:outline-none"
             >
               <option value="miles">Miles</option>

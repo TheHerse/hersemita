@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 type TemplatePayload = {
   id: string;
@@ -37,21 +38,21 @@ type ActivityRecord = {
 
 async function getCoach() {
   const { userId } = await auth();
-  if (!userId) return { supabase: null, coach: null };
+  if (!userId) return { supabase: null, coachId: null, teamId: null };
 
   const supabase = await createServerSupabaseClient();
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .maybeSingle();
+  const context = await getCurrentTeamContext(userId);
 
-  return { supabase, coach };
+  return {
+    supabase,
+    coachId: context?.team.owner_coach_id || context?.coach.id || null,
+    teamId: context?.team.id || null,
+  };
 }
 
 export async function GET() {
-  const { supabase, coach } = await getCoach();
-  if (!supabase || !coach?.id) {
+  const { supabase, coachId, teamId } = await getCoach();
+  if (!supabase || !coachId || !teamId) {
     return NextResponse.json({ error: "Coach profile required" }, { status: 401 });
   }
 
@@ -67,23 +68,23 @@ export async function GET() {
     supabase
       .from("workout_templates")
       .select("id, title, kind, miles, pace, warmup, main_set, cooldown, strength, location, notes, tags, created_at")
-      .eq("coach_id", coach.id)
+      .eq("team_id", teamId)
       .order("created_at", { ascending: true }),
     supabase
       .from("workout_assignments")
       .select("id, assigned_date, template_id, target_type, target_id, target_label, created_at")
-      .eq("coach_id", coach.id)
+      .eq("team_id", teamId)
       .order("assigned_date", { ascending: true }),
     supabase
       .from("activities")
-      .select("id, runner_id, distance_miles, start_time, verified, runners!inner(coach_id)")
-      .eq("runners.coach_id", coach.id)
+      .select("id, runner_id, distance_miles, start_time, verified, runners!inner(team_id)")
+      .eq("runners.team_id", teamId)
       .gte("start_time", since.toISOString())
       .order("start_time", { ascending: false }),
     supabase
       .from("runner_groups")
       .select("id")
-      .eq("coach_id", coach.id),
+      .eq("team_id", teamId),
   ]);
 
   if (templateError || assignmentError || activityError || groupError) {
@@ -144,8 +145,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { supabase, coach } = await getCoach();
-  if (!supabase || !coach?.id) {
+  const { supabase, coachId, teamId } = await getCoach();
+  if (!supabase || !coachId || !teamId) {
     return NextResponse.json({ error: "Coach profile required" }, { status: 401 });
   }
 
@@ -160,7 +161,7 @@ export async function PUT(request: Request) {
   const { error: deleteAssignmentsError } = await supabase
     .from("workout_assignments")
     .delete()
-    .eq("coach_id", coach.id);
+    .eq("team_id", teamId);
 
   if (deleteAssignmentsError) {
     return NextResponse.json({ error: deleteAssignmentsError.message }, { status: 500 });
@@ -169,7 +170,7 @@ export async function PUT(request: Request) {
   const { error: deleteTemplatesError } = await supabase
     .from("workout_templates")
     .delete()
-    .eq("coach_id", coach.id);
+    .eq("team_id", teamId);
 
   if (deleteTemplatesError) {
     return NextResponse.json({ error: deleteTemplatesError.message }, { status: 500 });
@@ -179,7 +180,8 @@ export async function PUT(request: Request) {
     const { error } = await supabase.from("workout_templates").insert(
       templates.map((template) => ({
         id: template.id,
-        coach_id: coach.id,
+        coach_id: coachId,
+        team_id: teamId,
         title: template.title,
         kind: template.kind,
         miles: template.miles || null,
@@ -208,7 +210,8 @@ export async function PUT(request: Request) {
       const { error } = await supabase.from("workout_assignments").insert(
         safeAssignments.map((assignment) => ({
           id: assignment.id,
-          coach_id: coach.id,
+          coach_id: coachId,
+          team_id: teamId,
           template_id: assignment.templateId,
           assigned_date: assignment.date,
           target_type: assignment.targetType,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
+import { getCurrentTeamContext } from "@/lib/team-context";
 
 async function deleteRunner(runnerId: string) {
   "use server";
@@ -11,19 +12,16 @@ async function deleteRunner(runnerId: string) {
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
 
-  if (!coach?.id) redirect("/runners");
+  if (!teamId) redirect("/runners");
 
   const { data: runner } = await supabase
     .from("runners")
     .select("id")
     .eq("id", runnerId)
-    .eq("coach_id", coach.id)
+    .eq("team_id", teamId)
     .single();
 
   if (!runner?.id) redirect("/runners");
@@ -35,7 +33,7 @@ async function deleteRunner(runnerId: string) {
     .from("runners")
     .delete()
     .eq("id", runner.id)
-    .eq("coach_id", coach.id);
+    .eq("team_id", teamId);
 
   if (error) {
     throw new Error(error.message);
@@ -55,19 +53,16 @@ export default async function DeleteRunnerPage({
 
   const { runnerId } = await params;
 
-  const { data: coach } = await supabase
-    .from("coaches")
-    .select("id")
-    .eq("clerk_id", userId)
-    .single();
+  const teamContext = await getCurrentTeamContext(userId);
+  const teamId = teamContext?.team.id;
 
-  if (!coach?.id) redirect("/runners");
+  if (!teamId) redirect("/runners");
 
   const { data: runner } = await supabase
     .from("runners")
     .select("id, first_name, last_name, grade, parent_phone, access_code, username")
     .eq("id", runnerId)
-    .eq("coach_id", coach.id)
+    .eq("team_id", teamId)
     .single();
 
   if (!runner) redirect("/runners");
