@@ -101,7 +101,7 @@ export default async function DeleteRunnerPage({
               <div className="mt-4 grid gap-3 text-sm text-[#cbd5e1] sm:grid-cols-2">
                 <p>Grade: {runner.grade}th</p>
                 <p>Username: {runner.username || "Not set"}</p>
-                <p>Access code: {runner.access_code}</p>
+                <p>Passcode: {runner.access_code}</p>
                 <p>Parent phone: {runner.parent_phone || "Not set"}</p>
                 <p>Activities: {activityCount || 0}</p>
               </div>

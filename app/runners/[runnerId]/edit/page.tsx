@@ -297,7 +297,7 @@ export default async function EditRunnerPage({
             <div>
               <h3 className="font-bold text-white">Runner Upload Credentials</h3>
               <p className="mt-1 text-sm text-[#cbd5e1]">Username: <span className="font-mono font-bold text-[#7dd3fc]">{runner.username || "Run the username SQL migration"}</span></p>
-              <p className="mt-1 text-sm text-[#cbd5e1]">Code: <span className="font-mono font-bold text-[#7dd3fc]">{runner.access_code}</span></p>
+              <p className="mt-1 text-sm text-[#cbd5e1]">Passcode: <span className="font-mono font-bold text-[#7dd3fc]">{runner.access_code}</span></p>
             </div>
             <form action={rotateRunnerCredentials.bind(null, runner.id)}>
               <button type="submit" className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600">

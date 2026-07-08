@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 function cleanNamePart(value: string) {
   return value
     .trim()
@@ -7,7 +9,9 @@ function cleanNamePart(value: string) {
 }
 
 export function makeAccessCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(10);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 }
 
 export function makeRunnerUsername(firstName: string, lastName: string) {

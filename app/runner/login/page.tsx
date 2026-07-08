@@ -8,7 +8,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [username, setUsername] = useState(searchParams.get("username") || "");
-  const [code, setCode] = useState(searchParams.get("code") || "");
+  const [passcode, setPasscode] = useState(searchParams.get("code") || "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const redirectTo = searchParams.get("redirect") || "/runner/dashboard";
@@ -21,7 +21,7 @@ function LoginForm() {
     const response = await fetch("/api/runner-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, code }),
+      body: JSON.stringify({ username, code: passcode }),
     });
 
     const result = await response.json().catch(() => null) as {
@@ -30,7 +30,7 @@ function LoginForm() {
     } | null;
 
     if (!response.ok || !result?.runner) {
-      setError(result?.error || "Invalid username or access code");
+      setError(result?.error || "Invalid username or passcode");
       setLoading(false);
       return;
     }
@@ -85,15 +85,17 @@ function LoginForm() {
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Enter your 6-digit access code
+              Passcode
             </label>
             <input
               type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              maxLength={6}
-              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] font-bold text-slate-800 focus:outline-none focus:border-[#00a7ff] focus:ring-4 focus:ring-[#00a7ff]/10 transition-all"
-              placeholder="000000"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              autoComplete="one-time-code"
+              maxLength={16}
+              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.18em] font-bold text-slate-800 focus:outline-none focus:border-[#00a7ff] focus:ring-4 focus:ring-[#00a7ff]/10 transition-all"
+              placeholder="A7K9Q2M4"
               required
             />
           </div>
@@ -114,7 +116,7 @@ function LoginForm() {
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-500">
-          Ask your coach for your username and access code
+          Ask your coach for your username and passcode
         </div>
       </div>
     </div>

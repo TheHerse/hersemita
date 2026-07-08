@@ -11,7 +11,7 @@ function normalizeUsername(value: unknown) {
 }
 
 function normalizeCode(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 
 function isRateLimited(key: string) {
@@ -34,8 +34,8 @@ export async function POST(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   const rateLimitKey = `${forwardedFor || "unknown"}:${username}`;
 
-  if (!username || !/^\d{6}$/.test(code)) {
-    return NextResponse.json({ error: "Invalid username or access code" }, { status: 401 });
+  if (!username || !/^[A-Z0-9]{8,16}$/.test(code)) {
+    return NextResponse.json({ error: "Invalid username or passcode" }, { status: 401 });
   }
 
   if (isRateLimited(rateLimitKey)) {
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (error || !runner) {
-    return NextResponse.json({ error: "Invalid username or access code" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid username or passcode" }, { status: 401 });
   }
 
   const runnerName = `${runner.first_name} ${runner.last_name}`;
