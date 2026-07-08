@@ -23,6 +23,45 @@ function primaryEmailFromClerkUser(user: Awaited<ReturnType<typeof currentUser>>
   return user.emailAddresses.find((item) => item.id === user.primaryEmailAddressId)?.emailAddress || user.emailAddresses[0]?.emailAddress || "";
 }
 
+function teamInviteMetadata(teamId: string, coachId: string) {
+  return {
+    hersemitaTeamInvite: {
+      teamId,
+      role: "assistant_coach",
+      invitedByCoachId: coachId,
+    },
+  };
+}
+
+async function createAssistantInvitation(email: string, teamId: string, coachId: string) {
+  const client = await clerkClient();
+  return client.invitations.createInvitation({
+    emailAddress: email,
+    expiresInDays: 7,
+    ignoreExisting: true,
+    notify: true,
+    redirectUrl: `${appBaseUrl()}/settings`,
+    publicMetadata: teamInviteMetadata(teamId, coachId),
+  });
+}
+
+async function getPendingTeamInvitations(teamId: string) {
+  const client = await clerkClient();
+  const invitations = await client.invitations.getInvitationList({ status: "pending", limit: 100 });
+
+  return invitations.data
+    .filter((invitation) => {
+      const metadata = invitation.publicMetadata?.hersemitaTeamInvite as { teamId?: string; role?: string } | undefined;
+      return metadata?.teamId === teamId && metadata.role === "assistant_coach";
+    })
+    .map((invitation) => ({
+      id: invitation.id,
+      emailAddress: invitation.emailAddress,
+      createdAt: invitation.createdAt,
+      url: invitation.url || "",
+    }));
+}
+
 async function applyAcceptedTeamInvite(userId: string) {
   const user = await currentUser();
   const invite = user?.publicMetadata?.hersemitaTeamInvite as
@@ -141,20 +180,7 @@ async function addAssistantCoach(formData: FormData) {
   const user = users.data[0];
 
   if (!user?.id) {
-    const invitation = await client.invitations.createInvitation({
-      emailAddress: email,
-      expiresInDays: 7,
-      ignoreExisting: true,
-      notify: true,
-      redirectUrl: `${appBaseUrl()}/settings`,
-      publicMetadata: {
-        hersemitaTeamInvite: {
-          teamId: context.team.id,
-          role: "assistant_coach",
-          invitedByCoachId: context.coach.id,
-        },
-      },
-    });
+    const invitation = await createAssistantInvitation(email, context.team.id, context.coach.id);
 
     if (!invitation?.id) {
       redirect(`/settings?teamError=${encodeURIComponent("Could not send the assistant coach invitation.")}`);
@@ -221,6 +247,48 @@ async function addAssistantCoach(formData: FormData) {
   redirect("/settings?teamSaved=1");
 }
 
+async function resendAssistantInvitation(formData: FormData) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") {
+    redirect("/settings?teamError=Only%20head%20coaches%20can%20resend%20assistant%20coach%20invitations.");
+  }
+
+  const invitationId = formData.get("invitationId") as string;
+  const email = ((formData.get("email") as string) || "").trim().toLowerCase();
+  if (!invitationId || !email) redirect("/settings?teamError=Invitation%20could%20not%20be%20resent.");
+
+  const client = await clerkClient();
+  await client.invitations.revokeInvitation(invitationId);
+  await createAssistantInvitation(email, context.team.id, context.coach.id);
+
+  redirect("/settings?teamInvited=1");
+}
+
+async function cancelAssistantInvitation(formData: FormData) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") {
+    redirect("/settings?teamError=Only%20head%20coaches%20can%20cancel%20assistant%20coach%20invitations.");
+  }
+
+  const invitationId = formData.get("invitationId") as string;
+  if (!invitationId) redirect("/settings?teamError=Invitation%20could%20not%20be%20cancelled.");
+
+  const client = await clerkClient();
+  await client.invitations.revokeInvitation(invitationId);
+
+  redirect("/settings?teamSaved=1");
+}
+
 async function removeAssistantCoach(formData: FormData) {
   "use server";
 
@@ -264,6 +332,7 @@ export default async function CoachSettingsPage({
     .single();
   const teamContext = await getCurrentTeamContext(userId);
   const teamMembers = teamContext ? await getTeamMembers(teamContext.team.id) : [];
+  const pendingInvitations = teamContext?.role === "head_coach" ? await getPendingTeamInvitations(teamContext.team.id) : [];
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
@@ -298,7 +367,7 @@ export default async function CoachSettingsPage({
 
         {params?.teamInvited && (
           <div className="mb-6 rounded-xl border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm text-green-100">
-            Assistant coach invitation sent. It expires in 7 days.
+            Assistant coach invitation sent. It expires in 7 days. If they do not see it, ask them to check spam or use the invite link below.
           </div>
         )}
 
@@ -389,24 +458,66 @@ export default async function CoachSettingsPage({
           )}
 
           {teamContext?.role === "head_coach" && (
-            <form action={addAssistantCoach} className="mt-6 rounded-lg border border-[#00a7ff]/20 bg-[#00a7ff]/5 p-4">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Add Assistant Coach</label>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <input
-                  name="assistantEmail"
-                  type="email"
-                  required
-                  placeholder="assistant@example.com"
-                  className="min-w-0 flex-1 rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
-                />
-                <button type="submit" className="rounded-lg bg-slate-900 px-5 py-3 font-bold text-white transition hover:bg-slate-800">
-                  Add
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-slate-500">
-                If they do not have a Hersemita account yet, they will receive an email invitation that expires in 7 days.
-              </p>
-            </form>
+            <>
+              {pendingInvitations.length > 0 && (
+                <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <h4 className="font-bold text-slate-900">Pending Invitations</h4>
+                  <div className="mt-3 space-y-3">
+                    {pendingInvitations.map((invitation) => (
+                      <div key={invitation.id} className="rounded-lg border border-amber-200 bg-white p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900">{invitation.emailAddress}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Sent {new Date(invitation.createdAt).toLocaleDateString()}
+                            </p>
+                            {invitation.url && (
+                              <a href={invitation.url} className="mt-2 block break-all text-sm font-semibold text-[#007ab8] underline">
+                                {invitation.url}
+                              </a>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <form action={resendAssistantInvitation}>
+                              <input type="hidden" name="invitationId" value={invitation.id} />
+                              <input type="hidden" name="email" value={invitation.emailAddress} />
+                              <button type="submit" className="rounded-lg border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-2 text-sm font-bold text-[#007ab8] transition hover:bg-[#00a7ff]/20">
+                                Resend
+                              </button>
+                            </form>
+                            <form action={cancelAssistantInvitation}>
+                              <input type="hidden" name="invitationId" value={invitation.id} />
+                              <button type="submit" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100">
+                                Cancel
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <form action={addAssistantCoach} className="mt-6 rounded-lg border border-[#00a7ff]/20 bg-[#00a7ff]/5 p-4">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Add Assistant Coach</label>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    name="assistantEmail"
+                    type="email"
+                    required
+                    placeholder="assistant@example.com"
+                    className="min-w-0 flex-1 rounded-lg border-2 border-slate-200 px-4 py-3 transition-colors focus:border-[#00a7ff] focus:outline-none"
+                  />
+                  <button type="submit" className="rounded-lg bg-slate-900 px-5 py-3 font-bold text-white transition hover:bg-slate-800">
+                    Add
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-slate-500">
+                  If they do not have a Hersemita account yet, they will receive an email invitation that expires in 7 days.
+                </p>
+              </form>
+            </>
           )}
         </section>
       </main>
