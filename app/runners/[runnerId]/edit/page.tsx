@@ -1,10 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { appBaseUrl } from "@/lib/app-url";
+import { logAuditEvent } from "@/lib/audit-log";
 import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
+import { linkGuardianToRunner, syncPrimaryRunnerGuardian, upsertGuardianContact } from "@/lib/guardian-contacts";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
@@ -12,12 +15,33 @@ import {
   type RunnerDivision,
 } from "@/lib/runner-groups";
 import { getCurrentTeamContext } from "@/lib/team-context";
+import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
 
 type Group = {
   id: string;
   name: string;
   color: string;
 };
+
+type PrimaryGuardian = {
+  id?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  clerk_id?: string | null;
+  portal_enabled?: boolean | null;
+};
+
+type GuardianLink = {
+  guardian_id: string;
+  relationship: string | null;
+  is_primary: boolean;
+  guardian_contacts: PrimaryGuardian | PrimaryGuardian[] | null;
+};
+
+const PARENT_INVITE_WINDOW_MS = 60 * 60 * 1000;
+const MAX_PARENT_INVITES = 10;
 
 function groupColorVar(color: string) {
   return { "--group-color": color } as CSSProperties;
@@ -46,6 +70,7 @@ async function updateRunner(runnerId: string, formData: FormData) {
   const grade = parseInt(formData.get("grade") as string);
   const division = formData.get("division") as RunnerDivision;
   const parentPhone = (formData.get("parentPhone") as string)?.trim();
+  const parentEmail = (formData.get("parentEmail") as string)?.trim();
   const customGroupIds = formData.getAll("groups") as string[];
 
   const { data: runner } = await supabase
@@ -81,6 +106,14 @@ async function updateRunner(runnerId: string, formData: FormData) {
     grade,
     division,
     client: supabase,
+  });
+
+  await syncPrimaryRunnerGuardian({
+    client: supabase,
+    teamId,
+    runnerId: runner.id,
+    phone: parentPhone,
+    email: parentEmail,
   });
 
   const { data: allowedCustomGroups } = customGroupIds.length
@@ -156,22 +189,223 @@ async function rotateRunnerCredentials(runnerId: string) {
   redirect(`/runners/${runnerId}/edit`);
 }
 
+function parentInviteMetadata(teamId: string, runnerId: string, guardianId: string, coachId: string) {
+  return {
+    hersemitaParentInvite: {
+      teamId,
+      runnerId,
+      guardianId,
+      role: "parent_guardian",
+      invitedByCoachId: coachId,
+    },
+  };
+}
+
+async function sendParentPortalInvite(runnerId: string, guardianId: string) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/runners");
+
+  const limit = await checkRateLimit({
+    key: rateLimitKey(["parent-portal-invite", teamId, coachId]),
+    windowMs: PARENT_INVITE_WINDOW_MS,
+    max: MAX_PARENT_INVITES,
+  });
+
+  if (limit.limited) {
+    redirect(`/runners/${runnerId}/edit?parentInviteError=${encodeURIComponent("Too many parent invite attempts. Try again later.")}`);
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { data: runner } = await supabase
+    .from("runners")
+    .select("id, first_name, last_name")
+    .eq("id", runnerId)
+    .eq("team_id", teamId)
+    .single();
+
+  if (!runner?.id) redirect("/runners");
+
+  const { data: guardianLink } = await supabase
+    .from("runner_guardians")
+    .select("guardian_contacts(id, email, clerk_id, portal_enabled)")
+    .eq("runner_id", runner.id)
+    .eq("guardian_id", guardianId)
+    .maybeSingle();
+
+  const guardian = guardianLink?.guardian_contacts as PrimaryGuardian | PrimaryGuardian[] | null | undefined;
+  const primaryGuardian = Array.isArray(guardian) ? guardian[0] : guardian;
+  const email = String(primaryGuardian?.email || "").trim().toLowerCase();
+
+  if (!primaryGuardian?.id || !email) {
+    redirect(`/runners/${runnerId}/edit?parentInviteError=${encodeURIComponent("Add a parent portal email before sending an invite.")}`);
+  }
+
+  if (primaryGuardian.portal_enabled === false) {
+    redirect(`/runners/${runnerId}/edit?parentInviteError=${encodeURIComponent("Parent portal access is disabled for this guardian.")}`);
+  }
+
+  if (primaryGuardian.clerk_id) {
+    redirect(`/runners/${runnerId}/edit?parentInvite=linked`);
+  }
+
+  const client = await clerkClient();
+  const users = await client.users.getUserList({ emailAddress: [email], limit: 1 });
+  const existingUser = users.data[0];
+
+  if (existingUser?.id) {
+    await supabase
+      .from("guardian_contacts")
+      .update({
+        clerk_id: existingUser.id,
+        last_portal_claimed_at: new Date().toISOString(),
+      })
+      .eq("id", primaryGuardian.id)
+      .eq("team_id", teamId);
+
+    await logAuditEvent({
+      teamId,
+      actorCoachId: coachId,
+      actorClerkId: userId,
+      action: "parent_portal.linked_existing_account",
+      entityType: "guardian_contact",
+      entityId: primaryGuardian.id,
+      metadata: {
+        email,
+        runnerId: runner.id,
+      },
+    });
+
+    redirect(`/runners/${runnerId}/edit?parentInvite=linked`);
+  }
+
+  const invitation = await client.invitations.createInvitation({
+    emailAddress: email,
+    expiresInDays: 7,
+    ignoreExisting: true,
+    notify: true,
+    redirectUrl: `${appBaseUrl()}/parent/dashboard`,
+    publicMetadata: parentInviteMetadata(teamId, runner.id, primaryGuardian.id, coachId),
+  });
+
+  await logAuditEvent({
+    teamId,
+    actorCoachId: coachId,
+    actorClerkId: userId,
+    action: "parent_portal.invited",
+    entityType: "guardian_contact",
+    entityId: primaryGuardian.id,
+    metadata: {
+      email,
+      runnerId: runner.id,
+      invitationId: invitation.id,
+      expiresInDays: 7,
+    },
+  });
+
+  redirect(`/runners/${runnerId}/edit?parentInvite=sent`);
+}
+
+async function addRunnerGuardian(runnerId: string, formData: FormData) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const supabase = await createServerSupabaseClient();
+  const { teamId } = await getTeamAccess(userId);
+  if (!teamId) redirect("/runners");
+
+  const firstName = (formData.get("guardianFirstName") as string)?.trim();
+  const lastName = (formData.get("guardianLastName") as string)?.trim();
+  const email = (formData.get("guardianEmail") as string)?.trim();
+  const phone = (formData.get("guardianPhone") as string)?.trim();
+  const relationship = ((formData.get("relationship") as string) || "parent_guardian").trim();
+
+  const { data: runner } = await supabase
+    .from("runners")
+    .select("id")
+    .eq("id", runnerId)
+    .eq("team_id", teamId)
+    .single();
+
+  if (!runner?.id) redirect("/runners");
+
+  try {
+    const guardian = await upsertGuardianContact({
+      client: supabase,
+      teamId,
+      firstName,
+      lastName,
+      email,
+      phone,
+    });
+
+    await linkGuardianToRunner({
+      client: supabase,
+      runnerId: runner.id,
+      guardianId: guardian.id,
+      relationship,
+      isPrimary: false,
+    });
+  } catch (error) {
+    redirect(`/runners/${runnerId}/edit?parentInviteError=${encodeURIComponent(error instanceof Error ? error.message : "Could not add guardian.")}`);
+  }
+
+  redirect(`/runners/${runnerId}/edit?guardianSaved=1`);
+}
+
+async function removeRunnerGuardian(runnerId: string, guardianId: string) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
+  const supabase = await createServerSupabaseClient();
+  const { teamId } = await getTeamAccess(userId);
+  if (!teamId) redirect("/runners");
+
+  const { data: runner } = await supabase
+    .from("runners")
+    .select("id")
+    .eq("id", runnerId)
+    .eq("team_id", teamId)
+    .single();
+
+  if (!runner?.id) redirect("/runners");
+
+  await supabase
+    .from("runner_guardians")
+    .delete()
+    .eq("runner_id", runner.id)
+    .eq("guardian_id", guardianId);
+
+  redirect(`/runners/${runnerId}/edit?guardianSaved=1`);
+}
+
 export default async function EditRunnerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ runnerId: string }>;
+  searchParams?: Promise<{ parentInvite?: string; parentInviteError?: string; guardianSaved?: string }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
   const supabase = await createServerSupabaseClient();
 
   const { runnerId } = await params;
+  const inviteParams = await searchParams;
   const { coachId, teamId } = await getTeamAccess(userId);
   if (!coachId || !teamId) redirect("/runners");
 
   await ensureDefaultRunnerGroups(coachId, supabase, teamId);
 
-  const [{ data: runner }, { data: groups }] = await Promise.all([
+  const [{ data: runner }, { data: groups }, { data: primaryGuardianLinks }, { data: guardianLinks }] = await Promise.all([
     supabase
       .from("runners")
       .select("id, first_name, last_name, grade, parent_phone, access_code, username")
@@ -183,6 +417,17 @@ export default async function EditRunnerPage({
       .select("id, name, color")
       .eq("team_id", teamId)
       .order("name", { ascending: true }),
+    supabase
+      .from("runner_guardians")
+      .select("guardian_contacts(id, email, clerk_id, portal_enabled)")
+      .eq("runner_id", runnerId)
+      .eq("relationship", "parent_guardian")
+      .eq("is_primary", true),
+    supabase
+      .from("runner_guardians")
+      .select("guardian_id, relationship, is_primary, guardian_contacts(id, first_name, last_name, phone, email, clerk_id, portal_enabled)")
+      .eq("runner_id", runnerId)
+      .order("is_primary", { ascending: false }),
   ]);
 
   if (!runner) redirect("/runners");
@@ -199,6 +444,13 @@ export default async function EditRunnerPage({
     : { data: [] };
 
   const assigned = new Set(memberships?.map((membership) => membership.group_id) || []);
+  const primaryGuardian = primaryGuardianLinks?.[0]?.guardian_contacts as PrimaryGuardian | PrimaryGuardian[] | null | undefined;
+  const primaryGuardianEmail = Array.isArray(primaryGuardian) ? primaryGuardian[0]?.email : primaryGuardian?.email;
+  const primaryGuardianClerkId = Array.isArray(primaryGuardian) ? primaryGuardian[0]?.clerk_id : primaryGuardian?.clerk_id;
+  const safeGuardianLinks = ((guardianLinks || []) as GuardianLink[]).map((link) => ({
+    ...link,
+    guardian_contacts: Array.isArray(link.guardian_contacts) ? link.guardian_contacts[0] || null : link.guardian_contacts,
+  }));
   const division =
     (safeGroups.find((group) => ["Boys", "Girls"].includes(group.name) && assigned.has(group.id))?.name as RunnerDivision | undefined) ||
     "None / Other";
@@ -217,6 +469,25 @@ export default async function EditRunnerPage({
         </div>
 
         <form action={updateRunner.bind(null, runner.id)} className="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+          {inviteParams?.parentInvite && (
+            <div className="rounded-lg border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm font-semibold text-green-800">
+              {inviteParams.parentInvite === "sent" && "Parent portal invitation sent. It expires in 7 days."}
+              {inviteParams.parentInvite === "linked" && "Parent portal access is already linked to an existing Hersemita account."}
+            </div>
+          )}
+
+          {inviteParams?.parentInviteError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+              {inviteParams.parentInviteError}
+            </div>
+          )}
+
+          {inviteParams?.guardianSaved && (
+            <div className="rounded-lg border border-[#00ff67]/30 bg-[#00ff67]/10 p-4 text-sm font-semibold text-green-800">
+              Guardian access updated.
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">First Name</label>
@@ -267,6 +538,12 @@ export default async function EditRunnerPage({
             <PhoneNumberInput name="parentPhone" placeholder="5551234567" defaultValue={runner.parent_phone} />
           </div>
 
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Parent Portal Email</label>
+            <input name="parentEmail" type="email" placeholder="parent@example.com" defaultValue={primaryGuardianEmail || ""} className="w-full rounded-lg border-2 border-slate-200 px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none" />
+            <p className="mt-1 text-xs text-slate-500">Parents use this email to access their linked runner in the parent portal.</p>
+          </div>
+
           {customGroups.length > 0 && (
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Custom Groups</label>
@@ -290,6 +567,80 @@ export default async function EditRunnerPage({
             Save Runner
           </button>
         </form>
+
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/10 p-5">
+          <div>
+            <h3 className="font-bold text-white">Parent Portal Access</h3>
+            <p className="mt-1 text-sm text-[#cbd5e1]">
+              Add every guardian who should have separate access. Email invites expire in 7 days.
+            </p>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {safeGuardianLinks.length === 0 ? (
+              <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-[#cbd5e1]">
+                No parent portal guardians are linked yet.
+              </div>
+            ) : (
+              safeGuardianLinks.map((link) => {
+                const guardian = link.guardian_contacts as PrimaryGuardian | null;
+                const guardianName = `${guardian?.first_name || ""} ${guardian?.last_name || ""}`.trim();
+                const guardianEmail = String(guardian?.email || "").trim().toLowerCase();
+
+                return (
+                  <div key={link.guardian_id} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-bold text-white">
+                          {guardianName || guardianEmail || guardian?.phone || "Guardian"}
+                          {link.is_primary && <span className="ml-2 rounded-full bg-[#00a7ff]/20 px-2 py-1 text-xs text-[#7dd3fc]">Primary</span>}
+                        </p>
+                        <p className="mt-1 break-all text-sm text-[#cbd5e1]">
+                          {guardianEmail || "No portal email"} {guardian?.phone ? `/ ${guardian.phone}` : ""}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          {guardian?.clerk_id ? "Linked account" : "Invite needed"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <form action={sendParentPortalInvite.bind(null, runner.id, link.guardian_id)}>
+                          <button
+                            type="submit"
+                            disabled={!guardianEmail || Boolean(guardian?.clerk_id)}
+                            className="rounded-lg bg-white px-4 py-2 text-sm font-bold text-slate-900 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Send Invite
+                          </button>
+                        </form>
+                        {!link.is_primary && (
+                          <form action={removeRunnerGuardian.bind(null, runner.id, link.guardian_id)}>
+                            <button type="submit" className="rounded-lg border border-red-300/40 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-100 transition hover:bg-red-500/20">
+                              Remove
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <form action={addRunnerGuardian.bind(null, runner.id)} className="mt-5 rounded-lg border border-[#00a7ff]/20 bg-[#00a7ff]/10 p-4">
+            <h4 className="font-bold text-white">Add Another Guardian</h4>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <input name="guardianFirstName" type="text" placeholder="First name" className="rounded-lg border border-white/20 bg-white px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]" />
+              <input name="guardianLastName" type="text" placeholder="Last name" className="rounded-lg border border-white/20 bg-white px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]" />
+              <input name="guardianEmail" type="email" placeholder="guardian@example.com" className="rounded-lg border border-white/20 bg-white px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]" />
+              <PhoneNumberInput name="guardianPhone" placeholder="5551234567" />
+            </div>
+            <input type="hidden" name="relationship" value="parent_guardian" />
+            <button type="submit" className="mt-3 rounded-lg bg-white px-4 py-2 text-sm font-bold text-slate-900 transition hover:bg-slate-100">
+              Add Guardian
+            </button>
+          </form>
+        </section>
 
         <div className="mt-6 rounded-xl border border-white/10 bg-white/10 p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
 import { logAuditEvent } from "@/lib/audit-log";
+import { appBaseUrl } from "@/lib/app-url";
 import { normalizeDistanceUnit } from "@/lib/distance-units";
 import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -15,13 +16,6 @@ const MAX_INVITE_ACTIONS = 10;
 function displayCoachEmail(email: string | null, clerkId: string | null) {
   if (!email || email === clerkId || email.startsWith("user_")) return "No email saved";
   return email;
-}
-
-function appBaseUrl() {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
-  if (process.env.NODE_ENV !== "production" && process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "https://www.hersemita.com";
 }
 
 function primaryEmailFromClerkUser(user: Awaited<ReturnType<typeof currentUser>>) {

@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
 import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
+import { syncPrimaryRunnerGuardian } from "@/lib/guardian-contacts";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
@@ -55,6 +56,7 @@ export default async function NewRunnerPage() {
     const grade = parseInt(formData.get("grade") as string);
     const division = formData.get("division") as RunnerDivision;
     const parentPhone = formData.get("parentPhone") as string;
+    const parentEmail = formData.get("parentEmail") as string;
     const customGroupIds = formData.getAll("groups") as string[];
     
     const accessCode = makeAccessCode();
@@ -97,6 +99,14 @@ export default async function NewRunnerPage() {
         grade,
         division,
         client: supabase,
+      });
+
+      await syncPrimaryRunnerGuardian({
+        client: supabase,
+        teamId,
+        runnerId: newRunner.id,
+        phone: parentPhone,
+        email: parentEmail,
       });
 
       const { data: extraGroups } = customGroupIds.length > 0
@@ -182,6 +192,12 @@ export default async function NewRunnerPage() {
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Parent Phone Number</label>
                 <PhoneNumberInput name="parentPhone" placeholder="5551234567" />
                 <p className="text-xs text-slate-500 mt-1">Digits only. For SMS updates about practices, meets, runner check-ins, and training updates.</p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Parent Portal Email</label>
+                <input name="parentEmail" type="email" placeholder="parent@example.com" className="w-full rounded-lg border-2 border-slate-200 px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none" />
+                <p className="mt-1 text-xs text-slate-500">Parents use this email to access their linked runner in the parent portal.</p>
             </div>
 
             <label className="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
