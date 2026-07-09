@@ -121,10 +121,10 @@ export default function RunnerDashboardPage() {
         ) : data ? (
           <>
             <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Total Runs" value={String(data.summary.totalRuns)} />
-              <StatCard label={`Total ${unitLabel}`} value={totalDistance.toFixed(1)} />
-              <StatCard label="Last 7 Days" value={`${weekDistance.toFixed(1)} ${unitLabel}`} />
-              <StatCard label="Best Pace" value={data.summary.fastestPace} />
+              <StatCard label="Total Runs" value={String(data.summary.totalRuns)} accent="#00a7ff" />
+              <StatCard label={`Total ${unitLabel}`} value={totalDistance.toFixed(1)} accent="#00ff67" />
+              <StatCard label="Last 7 Days" value={`${weekDistance.toFixed(1)} ${unitLabel}`} accent="#f59e0b" />
+              <StatCard label="Best Pace" value={data.summary.fastestPace} accent="#14b8a6" />
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -153,15 +153,15 @@ export default function RunnerDashboardPage() {
                         <dl className="grid grid-cols-3 gap-3 text-center text-sm sm:min-w-[320px]">
                           <div>
                             <dt className="text-slate-500">{unitLabel}</dt>
-                            <dd className="font-bold text-slate-900">{(activity.distance ?? activity.distanceMiles).toFixed(2)}</dd>
+                            <dd className="font-bold text-[#008cff]">{(activity.distance ?? activity.distanceMiles).toFixed(2)}</dd>
                           </div>
                           <div>
                             <dt className="text-slate-500">Pace</dt>
-                            <dd className="font-bold text-slate-900">{activity.pace}</dd>
+                            <dd className="font-bold text-[#059669]">{activity.pace}</dd>
                           </div>
                           <div>
                             <dt className="text-slate-500">Time</dt>
-                            <dd className="font-bold text-slate-900">{formatDuration(activity.durationSeconds)}</dd>
+                            <dd className="font-bold text-[#d97706]">{formatDuration(activity.durationSeconds)}</dd>
                           </div>
                         </dl>
                       </div>
@@ -178,11 +178,11 @@ export default function RunnerDashboardPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border bg-white p-4 shadow-sm" style={{ borderColor: `${accent}55` }}>
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
+      <p className="mt-2 text-3xl font-bold" style={{ color: accent }}>{value}</p>
     </div>
   );
 }

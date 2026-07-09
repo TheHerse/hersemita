@@ -1,10 +1,16 @@
 import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
+import { logAuditEvent } from "@/lib/audit-log";
 import { normalizeDistanceUnit } from "@/lib/distance-units";
+import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getCurrentTeamContext, getTeamMembers } from "@/lib/team-context";
+
+const INVITE_WINDOW_MS = 60 * 60 * 1000;
+const MAX_INVITE_ACTIONS = 10;
 
 function displayCoachEmail(email: string | null, clerkId: string | null) {
   if (!email || email === clerkId || email.startsWith("user_")) return "No email saved";
@@ -193,6 +199,16 @@ async function addAssistantCoach(formData: FormData) {
     redirect("/settings?teamError=Only%20head%20coaches%20can%20add%20assistant%20coaches.");
   }
 
+  const limit = await checkRateLimit({
+    key: rateLimitKey(["assistant-invite", context.team.id, userId]),
+    windowMs: INVITE_WINDOW_MS,
+    max: MAX_INVITE_ACTIONS,
+  });
+
+  if (limit.limited) {
+    redirect("/settings?teamError=Too%20many%20invite%20actions.%20Try%20again%20later.");
+  }
+
   const email = ((formData.get("assistantEmail") as string) || "").trim().toLowerCase();
   if (!email) redirect("/settings?teamError=Assistant%20email%20is%20required.");
 
@@ -206,6 +222,18 @@ async function addAssistantCoach(formData: FormData) {
     if (!invitation?.id) {
       redirect(`/settings?teamError=${encodeURIComponent("Could not send the assistant coach invitation.")}`);
     }
+
+    await logAuditEvent({
+      teamId: context.team.id,
+      actorCoachId: context.coach.id,
+      actorClerkId: userId,
+      action: "assistant.invited",
+      entityType: "clerk_invitation",
+      entityId: invitation.id,
+      metadata: {
+        email,
+      },
+    });
 
     redirect("/settings?teamInvited=1");
   }
@@ -265,6 +293,18 @@ async function addAssistantCoach(formData: FormData) {
     redirect(`/settings?teamError=${encodeURIComponent(membershipError.message)}`);
   }
 
+  await logAuditEvent({
+    teamId: context.team.id,
+    actorCoachId: context.coach.id,
+    actorClerkId: userId,
+    action: "assistant.added",
+    entityType: "coach",
+    entityId: assistantCoach.id,
+    metadata: {
+      email: primaryEmail,
+    },
+  });
+
   redirect("/settings?teamSaved=1");
 }
 
@@ -279,13 +319,36 @@ async function resendAssistantInvitation(formData: FormData) {
     redirect("/settings?teamError=Only%20head%20coaches%20can%20resend%20assistant%20coach%20invitations.");
   }
 
+  const limit = await checkRateLimit({
+    key: rateLimitKey(["assistant-invite", context.team.id, userId]),
+    windowMs: INVITE_WINDOW_MS,
+    max: MAX_INVITE_ACTIONS,
+  });
+
+  if (limit.limited) {
+    redirect("/settings?teamError=Too%20many%20invite%20actions.%20Try%20again%20later.");
+  }
+
   const invitationId = formData.get("invitationId") as string;
   const email = ((formData.get("email") as string) || "").trim().toLowerCase();
   if (!invitationId || !email) redirect("/settings?teamError=Invitation%20could%20not%20be%20resent.");
 
   const client = await clerkClient();
   await client.invitations.revokeInvitation(invitationId);
-  await createAssistantInvitation(email, context.team.id, context.coach.id);
+  const invitation = await createAssistantInvitation(email, context.team.id, context.coach.id);
+
+  await logAuditEvent({
+    teamId: context.team.id,
+    actorCoachId: context.coach.id,
+    actorClerkId: userId,
+    action: "assistant.invite_resent",
+    entityType: "clerk_invitation",
+    entityId: invitation.id,
+    metadata: {
+      email,
+      previousInvitationId: invitationId,
+    },
+  });
 
   redirect("/settings?teamInvited=1");
 }
@@ -306,6 +369,15 @@ async function cancelAssistantInvitation(formData: FormData) {
 
   const client = await clerkClient();
   await client.invitations.revokeInvitation(invitationId);
+
+  await logAuditEvent({
+    teamId: context.team.id,
+    actorCoachId: context.coach.id,
+    actorClerkId: userId,
+    action: "assistant.invite_canceled",
+    entityType: "clerk_invitation",
+    entityId: invitationId,
+  });
 
   redirect("/settings?teamSaved=1");
 }
@@ -330,6 +402,15 @@ async function removeAssistantCoach(formData: FormData) {
     .eq("team_id", context.team.id)
     .eq("coach_id", coachId)
     .eq("role", "assistant_coach");
+
+  await logAuditEvent({
+    teamId: context.team.id,
+    actorCoachId: context.coach.id,
+    actorClerkId: userId,
+    action: "assistant.removed",
+    entityType: "coach",
+    entityId: coachId,
+  });
 
   redirect("/settings?teamSaved=1");
 }
@@ -459,6 +540,11 @@ export default async function CoachSettingsPage({
                   : "Team access is not set up for this account yet."}
               </p>
             </div>
+            {teamContext?.role === "head_coach" && (
+              <Link href="/settings/audit" className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
+                Audit Log
+              </Link>
+            )}
           </div>
 
           {teamContext && (

@@ -148,14 +148,20 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
       }
 
       if (isImage) {
-        const fileName = `${runnerId}/coach_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-        const { error: uploadError } = await supabase.storage
-          .from("activity-screenshots")
-          .upload(fileName, file);
+        const uploadData = new FormData();
+        uploadData.append("file", file);
+        uploadData.append("runnerId", runnerId);
 
-        if (uploadError) throw uploadError;
+        const uploadResponse = await fetch("/api/coach-screenshots", {
+          method: "POST",
+          body: uploadData,
+        });
+        const uploadResult = await uploadResponse.json().catch(() => null) as { url?: string; error?: string } | null;
 
-        const { data } = supabase.storage.from("activity-screenshots").getPublicUrl(fileName);
+        if (!uploadResponse.ok || !uploadResult?.url) {
+          throw new Error(uploadResult?.error || "Screenshot upload failed");
+        }
+
         const distance = parseFloat(manualData.distance);
         const durationSeconds = durationToSeconds(manualData.duration);
         const paceSeconds = manualData.pace ? paceToSeconds(manualData.pace) : Math.round(durationSeconds / distance);
@@ -171,7 +177,7 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
           uploaded_by: "coach",
           file_type: "screenshot",
           original_filename: file.name,
-          screenshot_urls: [data.publicUrl],
+          screenshot_urls: [uploadResult.url],
           notes: manualData.notes || null,
           ...buildTrainingFields({
             durationSeconds,

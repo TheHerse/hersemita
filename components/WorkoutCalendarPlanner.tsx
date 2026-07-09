@@ -256,6 +256,7 @@ export default function WorkoutCalendarPlanner({
   const [showMobileDayDetails, setShowMobileDayDetails] = useState(false);
   const [dayWorkoutTool, setDayWorkoutTool] = useState<"create" | "library" | null>(null);
   const [calendarLoaded, setCalendarLoaded] = useState(false);
+  const [calendarRevision, setCalendarRevision] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState("Loading calendar...");
 
   useEffect(() => {
@@ -277,6 +278,7 @@ export default function WorkoutCalendarPlanner({
           assignments?: CalendarAssignment[];
           activities?: CompletedActivity[];
           memberships?: GroupMembership[];
+          revision?: string;
           error?: string;
         } | null;
 
@@ -303,6 +305,7 @@ export default function WorkoutCalendarPlanner({
         setAssignments(normalized.assignments);
         setActivities(remote?.activities || []);
         setMemberships(remote?.memberships || []);
+        setCalendarRevision(remote?.revision || null);
         setSelectedTemplateId("");
         setSyncStatus(hasRemoteData ? "Synced to student portal." : localData ? "Migrating saved browser calendar to Supabase..." : "Ready to sync calendar.");
         setCalendarLoaded(true);
@@ -335,10 +338,17 @@ export default function WorkoutCalendarPlanner({
         const response = await fetch("/api/workout-calendar", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ templates, assignments }),
+          body: JSON.stringify({ templates, assignments, revision: calendarRevision }),
         });
-        const result = await response.json().catch(() => null) as { error?: string } | null;
-        setSyncStatus(response.ok ? "Synced to student portal." : result?.error || "Calendar sync failed.");
+        const result = await response.json().catch(() => null) as { error?: string; revision?: string } | null;
+
+        if (response.ok) {
+          setCalendarRevision(result?.revision || null);
+          setSyncStatus("Synced to student portal.");
+          return;
+        }
+
+        setSyncStatus(result?.error || "Calendar sync failed.");
       } catch {
         setSyncStatus("Calendar sync failed. Check Supabase calendar tables.");
       }
@@ -393,8 +403,7 @@ export default function WorkoutCalendarPlanner({
   }
 
   const monthStats = useMemo(() => {
-    const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
-    const monthEnd = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+    const viewedMonthKey = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}`;
     const todayKey = isoDate(new Date());
     const completedUploadKeys = new Set(activities.map((activity) => `${activity.runnerId}:${isoDateFromValue(activity.startTime)}`));
     let plannedMiles = 0;
@@ -423,8 +432,8 @@ export default function WorkoutCalendarPlanner({
     });
 
     const completedMiles = activities.reduce((sum, activity) => {
-      const activityDate = new Date(activity.startTime);
-      if (!activity.verified || activityDate < monthStart || activityDate >= monthEnd) return sum;
+      const activityMonthKey = isoDateFromValue(activity.startTime).slice(0, 7);
+      if (!activity.verified || activityMonthKey !== viewedMonthKey) return sum;
       return sum + activity.distanceMiles;
     }, 0);
 

@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getCurrentTeamContext } from "@/lib/team-context";
@@ -35,6 +36,39 @@ type ActivityRecord = {
   start_time: string;
   verified: boolean | null;
 };
+
+function calendarRevision(
+  templates: Array<Record<string, unknown>> | null | undefined,
+  assignments: Array<Record<string, unknown>> | null | undefined
+) {
+  const payload = {
+    templates: (templates || []).map((template) => ({
+      id: template.id,
+      title: template.title,
+      kind: template.kind,
+      miles: template.miles || "",
+      pace: template.pace || "",
+      warmup: template.warmup || "",
+      main_set: template.main_set || "",
+      cooldown: template.cooldown || "",
+      strength: template.strength || "",
+      location: template.location || "",
+      notes: template.notes || "",
+      tags: template.tags || [],
+      created_at: template.created_at || "",
+    })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    assignments: (assignments || []).map((assignment) => ({
+      id: assignment.id,
+      assigned_date: assignment.assigned_date,
+      template_id: assignment.template_id,
+      target_type: assignment.target_type,
+      target_id: assignment.target_id,
+      target_label: assignment.target_label || "",
+    })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
+  };
+
+  return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
 
 async function getCoach() {
   const { userId } = await auth();
@@ -107,6 +141,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
+    revision: calendarRevision(templates, assignments),
     templates: (templates || []).map((template) => ({
       id: template.id,
       title: template.title,
@@ -153,10 +188,37 @@ export async function PUT(request: Request) {
   const body = await request.json().catch(() => null) as {
     templates?: TemplatePayload[];
     assignments?: AssignmentPayload[];
+    revision?: string | null;
   } | null;
 
   const templates = body?.templates || [];
   const assignments = body?.assignments || [];
+
+  const [{ data: currentTemplates, error: currentTemplateError }, { data: currentAssignments, error: currentAssignmentError }] = await Promise.all([
+    supabase
+      .from("workout_templates")
+      .select("id, title, kind, miles, pace, warmup, main_set, cooldown, strength, location, notes, tags, created_at")
+      .eq("team_id", teamId),
+    supabase
+      .from("workout_assignments")
+      .select("id, assigned_date, template_id, target_type, target_id, target_label")
+      .eq("team_id", teamId),
+  ]);
+
+  if (currentTemplateError || currentAssignmentError) {
+    return NextResponse.json({ error: currentTemplateError?.message || currentAssignmentError?.message || "Could not verify calendar revision" }, { status: 500 });
+  }
+
+  const currentRevision = calendarRevision(currentTemplates, currentAssignments);
+  if (body?.revision && body.revision !== currentRevision) {
+    return NextResponse.json(
+      {
+        error: "Calendar changed on another device. Refresh to load the latest version before saving.",
+        revision: currentRevision,
+      },
+      { status: 409 }
+    );
+  }
 
   const { error: deleteAssignmentsError } = await supabase
     .from("workout_assignments")
@@ -226,5 +288,16 @@ export async function PUT(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  const [{ data: savedTemplates }, { data: savedAssignments }] = await Promise.all([
+    supabase
+      .from("workout_templates")
+      .select("id, title, kind, miles, pace, warmup, main_set, cooldown, strength, location, notes, tags, created_at")
+      .eq("team_id", teamId),
+    supabase
+      .from("workout_assignments")
+      .select("id, assigned_date, template_id, target_type, target_id, target_label")
+      .eq("team_id", teamId),
+  ]);
+
+  return NextResponse.json({ ok: true, revision: calendarRevision(savedTemplates, savedAssignments) });
 }

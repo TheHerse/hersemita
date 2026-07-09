@@ -1,6 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { removeActivityScreenshots } from "@/lib/activity-screenshot-storage";
+import { logAuditEvent } from "@/lib/audit-log";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
 import { getCurrentTeamContext } from "@/lib/team-context";
@@ -26,6 +28,13 @@ async function deleteRunner(runnerId: string) {
 
   if (!runner?.id) redirect("/runners");
 
+  const { data: activities } = await supabase
+    .from("activities")
+    .select("screenshot_urls")
+    .eq("runner_id", runner.id);
+  const screenshotUrls = (activities || []).flatMap((activity) => activity.screenshot_urls || []);
+
+  await removeActivityScreenshots(screenshotUrls);
   await supabase.from("runner_group_members").delete().eq("runner_id", runner.id);
   await supabase.from("activities").delete().eq("runner_id", runner.id);
 
@@ -38,6 +47,19 @@ async function deleteRunner(runnerId: string) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await logAuditEvent({
+    teamId,
+    actorCoachId: teamContext?.coach.id,
+    actorClerkId: userId,
+    action: "runner.deleted",
+    entityType: "runner",
+    entityId: runner.id,
+    metadata: {
+      activityCount: activities?.length || 0,
+      screenshotCount: screenshotUrls.length,
+    },
+  });
 
   redirect("/runners");
 }

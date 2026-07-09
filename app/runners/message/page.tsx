@@ -5,6 +5,7 @@ import Link from "next/link";
 import { sendMassSMS } from "@/lib/twilio";
 import CoachHeader from "@/components/CoachHeader";
 import MessageParentsForm from "@/components/MessageParentsForm";
+import { logAuditEvent } from "@/lib/audit-log";
 import { getCurrentTeamContext } from "@/lib/team-context";
 
 async function sendMessage(formData: FormData) {
@@ -51,6 +52,21 @@ async function sendMessage(formData: FormData) {
     phones,
     `${teamContext?.team.school_name || teamContext?.team.name ? `${teamContext?.team.school_name || teamContext?.team.name} - ` : ""}Coach ${coach?.name || ""}: ${message}`.trim()
   );
+
+  await logAuditEvent({
+    teamId,
+    actorCoachId: teamContext?.coach.id || coach.id,
+    actorClerkId: userId,
+    action: "parent_message.sent",
+    entityType: "parent_message",
+    metadata: {
+      messageType,
+      runnerCount: selectedRunners.length,
+      phoneCount: phones.length,
+      success: result.success,
+      mock: result.mock,
+    },
+  });
   
   const status = result.success ? "sent" : result.mock ? "mock" : "error";
   redirect(`/runners/message?status=${status}&count=${phones.length}&type=${messageType}`);

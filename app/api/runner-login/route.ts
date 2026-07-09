@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit, clientIpFromHeaders, rateLimitKey } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { setRunnerSession } from "@/lib/runner-session";
 
-const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
@@ -14,31 +14,21 @@ function normalizeCode(value: unknown) {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
 
-function isRateLimited(key: string) {
-  const now = Date.now();
-  const current = attempts.get(key);
-
-  if (!current || current.resetAt <= now) {
-    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return false;
-  }
-
-  current.count += 1;
-  return current.count > MAX_ATTEMPTS;
-}
-
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const username = normalizeUsername(body?.username);
   const code = normalizeCode(body?.code);
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const rateLimitKey = `${forwardedFor || "unknown"}:${username}`;
+  const limit = await checkRateLimit({
+    key: rateLimitKey(["runner-login", clientIpFromHeaders(request.headers), username]),
+    windowMs: WINDOW_MS,
+    max: MAX_ATTEMPTS,
+  });
 
   if (!username || !/^[A-Z0-9]{8,16}$/.test(code)) {
     return NextResponse.json({ error: "Invalid username or passcode" }, { status: 401 });
   }
 
-  if (isRateLimited(rateLimitKey)) {
+  if (limit.limited) {
     return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
   }
 

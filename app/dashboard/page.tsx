@@ -11,6 +11,7 @@ import CoachHeader from "@/components/CoachHeader";
 import ScreenshotProofViewer from "@/components/ScreenshotProofViewer";
 import TrainingLoadRecoveryPanel from "@/components/TrainingLoadRecoveryPanel";
 import type { LoadRecoveryRow } from "@/components/TrainingLoadRecoveryPanel";
+import { logAuditEvent } from "@/lib/audit-log";
 import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 import { getCurrentTeamContext } from "@/lib/team-context";
 
@@ -88,6 +89,18 @@ async function verifyActivity(activityId: string) {
     .eq("id", activityId);
   
   if (updateError) throw updateError;
+
+  await logAuditEvent({
+    teamId,
+    actorCoachId: context?.coach.id,
+    actorClerkId: userId,
+    action: "activity.verified",
+    entityType: "activity",
+    entityId: activityId,
+    metadata: {
+      source: "dashboard_quick_verify",
+    },
+  });
   
   redirect("/dashboard");
 }
