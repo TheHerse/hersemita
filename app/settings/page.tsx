@@ -357,7 +357,7 @@ export default async function CoachSettingsPage({
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
-      <CoachHeader />
+      <CoachHeader active="settings" />
 
       <main className="mx-auto max-w-2xl p-4 sm:p-6 lg:p-8">
         <div className="mb-8 rounded-2xl border border-white/10 bg-white/10 p-5 shadow-2xl shadow-black/10 backdrop-blur sm:p-6">

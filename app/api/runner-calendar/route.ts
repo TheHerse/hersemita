@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getRunnerSession } from "@/lib/runner-session";
 
+function isoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 export async function GET() {
   const session = await getRunnerSession();
   if (!session) {
@@ -48,6 +52,7 @@ export async function GET() {
     .select("id, assigned_date, target_type, target_id, workout_templates(title, kind, miles, pace, warmup, main_set, cooldown, strength, location, notes, tags)")
     .eq("team_id", runner.team_id)
     .in("target_id", targetIds)
+    .gte("assigned_date", isoDate(new Date()))
     .order("assigned_date", { ascending: true });
 
   if (error) {

@@ -79,6 +79,11 @@ function formatPace(seconds: number) {
   return `${minutes}:${remainder}`;
 }
 
+function formatPaceMinutes(minutesValue: number) {
+  if (!Number.isFinite(minutesValue) || minutesValue <= 0) return "--:--";
+  return formatPace(minutesValue * 60);
+}
+
 function shortDate(value: string) {
   return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
@@ -280,6 +285,7 @@ export default function CoachAnalyticsWorkbench({
   }, [selectedIds, verifiedOnly, windowDays]);
   const activityExportHref = `/api/exports/activities?${exportParams}`;
   const runnerSummaryExportHref = `/api/exports/runner-summary?${exportParams}`;
+  const volumeChartRows = athleteRows.filter((row) => row.runs > 0).slice(0, 12);
 
   const toggle = (value: string, values: string[], setValues: (next: string[]) => void) => {
     setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
@@ -421,31 +427,49 @@ export default function CoachAnalyticsWorkbench({
       </section>
 
       <section className="mb-6 grid gap-6 lg:grid-cols-2">
-        <ChartCard title="Daily Volume & Pace" description="Shows how much training was logged each day and whether average pace is moving.">
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={dailyTrend}>
-              <CartesianGrid stroke="rgba(148,163,184,0.18)" />
-              <XAxis dataKey="date" tick={{ fill: "var(--subtle)", fontSize: 12 }} />
-              <YAxis yAxisId="left" tick={{ fill: "var(--subtle)", fontSize: 12 }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: "var(--subtle)", fontSize: 12 }} />
-              <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }} />
-              <Legend />
-              <Bar yAxisId="left" dataKey="miles" fill="#00a7ff" radius={[4, 4, 0, 0]} name={unitLabel} />
-              <Line yAxisId="right" type="monotone" dataKey="avgPace" stroke="#00ff67" strokeWidth={3} name={`Avg pace min/${unitLabel}`} />
-            </ComposedChart>
-          </ResponsiveContainer>
+        <ChartCard title="Daily Volume & Pace" description="Shows logged training volume by day with average pace on the same timeline.">
+          {dailyTrend.length === 0 ? (
+            <EmptyChart message="No activities match the current filters." />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={dailyTrend}>
+                <CartesianGrid stroke="rgba(148,163,184,0.18)" />
+                <XAxis dataKey="date" tick={{ fill: "var(--subtle)", fontSize: 12 }} />
+                <YAxis yAxisId="left" tick={{ fill: "var(--subtle)", fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: "var(--subtle)", fontSize: 12 }} tickFormatter={formatPaceMinutes} />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}
+                  formatter={(value, name) =>
+                    String(name).includes("Avg pace")
+                      ? [`${formatPaceMinutes(Number(value))}/${unitLabel}`, name]
+                      : [`${Number(value).toFixed(1)} ${unitLabel}`, name]
+                  }
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="miles" fill="#00a7ff" radius={[4, 4, 0, 0]} name={`Daily ${unitLabel}`} />
+                <Line yAxisId="right" type="monotone" dataKey="avgPace" stroke="#00ff67" strokeWidth={3} name={`Avg pace`} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
         </ChartCard>
 
         <ChartCard title="Volume by Runner" description="Compares total training volume so outliers and missing data are easier to see.">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={athleteRows.slice(0, 12)}>
-              <CartesianGrid stroke="rgba(148,163,184,0.18)" />
-              <XAxis dataKey="name" tick={{ fill: "var(--subtle)", fontSize: 11 }} interval={0} angle={-28} textAnchor="end" height={80} />
-              <YAxis tick={{ fill: "var(--subtle)", fontSize: 12 }} />
-              <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }} />
-              <Bar dataKey="miles" name={unitLabel} fill="#00a7ff" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {volumeChartRows.length === 0 ? (
+            <EmptyChart message="No runner volume to show for this view." />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={volumeChartRows}>
+                <CartesianGrid stroke="rgba(148,163,184,0.18)" />
+                <XAxis dataKey="name" tick={{ fill: "var(--subtle)", fontSize: 11 }} interval={0} angle={-28} textAnchor="end" height={80} />
+                <YAxis tick={{ fill: "var(--subtle)", fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}
+                  formatter={(value) => [`${Number(value).toFixed(1)} ${unitLabel}`, unitLabel]}
+                />
+                <Bar dataKey="miles" name={unitLabel} fill="#00a7ff" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </ChartCard>
       </section>
 
@@ -481,17 +505,21 @@ export default function CoachAnalyticsWorkbench({
         </ChartCard>
 
         <ChartCard title="Submission Sources" description="Shows whether data is coming from screenshots, manual entries, or connected activity sources.">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={sourceMix} dataKey="value" nameKey="name" innerRadius={62} outerRadius={98} paddingAngle={3}>
-                {sourceMix.map((entry, index) => (
-                  <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          {sourceMix.length === 0 ? (
+            <EmptyChart message="No submission sources in this filtered view." />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={sourceMix} dataKey="value" nameKey="name" innerRadius={62} outerRadius={98} paddingAngle={3}>
+                  {sourceMix.map((entry, index) => (
+                    <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </ChartCard>
       </section>
 
@@ -576,6 +604,14 @@ function ChartCard({
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
       {children}
+    </div>
+  );
+}
+
+function EmptyChart({ message }: { message: string }) {
+  return (
+    <div className="flex h-[260px] items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-900/30 p-6 text-center text-sm font-semibold text-slate-400">
+      {message}
     </div>
   );
 }

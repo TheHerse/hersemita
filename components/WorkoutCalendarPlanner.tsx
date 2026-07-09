@@ -401,15 +401,22 @@ export default function WorkoutCalendarPlanner({
     let plannedRunnerDays = 0;
     let missedUploads = 0;
     let upcomingSlots = 0;
+    let dueRunnerDays = 0;
+    let completedRunnerDays = 0;
 
     currentMonthAssignments.forEach((assignment) => {
       const template = templatesById.get(assignment.templateId);
-      const targetRunnerCount = Math.max(resolveAssignmentRunnerIds(assignment).length, 1);
+      const assignedRunnerIds = resolveAssignmentRunnerIds(assignment);
+      const targetRunnerCount = Math.max(assignedRunnerIds.length, 1);
       plannedMiles += parseMileageRange(template?.miles || "") * targetRunnerCount;
       plannedRunnerDays += targetRunnerCount;
 
-      resolveAssignmentRunnerIds(assignment).forEach((runnerId) => {
+      assignedRunnerIds.forEach((runnerId) => {
         const key = `${runnerId}:${assignment.date}`;
+        if (assignment.date <= todayKey) {
+          dueRunnerDays += 1;
+          if (completedUploadKeys.has(key)) completedRunnerDays += 1;
+        }
         if (assignment.date < todayKey && !completedUploadKeys.has(key)) missedUploads += 1;
         if (assignment.date >= todayKey) upcomingSlots += 1;
       });
@@ -425,6 +432,9 @@ export default function WorkoutCalendarPlanner({
       plannedMiles,
       completedMiles,
       plannedRunnerDays,
+      dueRunnerDays,
+      completedRunnerDays,
+      completionRate: dueRunnerDays > 0 ? completedRunnerDays / dueRunnerDays : 0,
       missedUploads,
       upcomingSlots,
     };
@@ -537,11 +547,11 @@ export default function WorkoutCalendarPlanner({
             <p className="mt-3 text-sm font-semibold text-[#7dd3fc]">{syncStatus}</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:min-w-[560px] lg:grid-cols-5">
-            <HeaderStat label="Assigned" value={currentMonthAssignments.length.toString()} detail="workouts" />
-            <HeaderStat label="Planned" value={formatMiles(monthStats.plannedMiles)} detail="runner miles" />
-            <HeaderStat label="Completed" value={formatMiles(monthStats.completedMiles)} detail="verified miles" />
-            <HeaderStat label="Upcoming" value={monthStats.upcomingSlots.toString()} detail="runner slots" />
-            <HeaderStat label="Missed" value={monthStats.missedUploads.toString()} detail="uploads" intent={monthStats.missedUploads > 0 ? "attention" : "neutral"} />
+            <HeaderStat label="Workouts" value={currentMonthAssignments.length.toString()} detail={`${monthStats.upcomingSlots} upcoming slots`} />
+            <HeaderStat label="Planned" value={formatMiles(monthStats.plannedMiles)} detail={`${monthStats.plannedRunnerDays} runner-days`} />
+            <HeaderStat label="Logged" value={formatMiles(monthStats.completedMiles)} detail="verified miles" />
+            <HeaderStat label="Completion" value={`${Math.round(monthStats.completionRate * 100)}%`} detail={`${monthStats.completedRunnerDays}/${monthStats.dueRunnerDays} due`} />
+            <HeaderStat label="Missing" value={monthStats.missedUploads.toString()} detail="past due uploads" intent={monthStats.missedUploads > 0 ? "attention" : "neutral"} />
           </div>
         </div>
       </section>

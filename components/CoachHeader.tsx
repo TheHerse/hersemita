@@ -5,7 +5,7 @@ import Link from "next/link";
 import CoachMobileMenu from "@/components/CoachMobileMenu";
 import CoachUserButton from "@/components/CoachUserButton";
 
-type CoachNavKey = "dashboard" | "runners" | "groups" | "calendar" | "analytics" | "alerts" | "message" | "activities";
+type CoachNavKey = "dashboard" | "runners" | "groups" | "calendar" | "analytics" | "alerts" | "message" | "activities" | "settings";
 
 const navLinks: Array<{ key: CoachNavKey; href: string; label: string }> = [
   { key: "dashboard", href: "/dashboard", label: "Dashboard" },
@@ -47,11 +47,14 @@ export default function CoachHeader({ active }: { active?: CoachNavKey }) {
 
         <CoachMobileMenu
           showUserButton
-          links={navLinks.map((link) => ({
-            href: link.href,
-            label: link.key === "message" ? "Message Parents" : link.label,
-            active: active === link.key,
-          }))}
+          links={[
+            ...navLinks.map((link) => ({
+              href: link.href,
+              label: link.key === "message" ? "Message Parents" : link.label,
+              active: active === link.key,
+            })),
+            { href: "/settings", label: "Settings", active: active === "settings" },
+          ]}
         />
       </div>
     </header>
