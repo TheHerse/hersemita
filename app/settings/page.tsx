@@ -121,12 +121,14 @@ async function saveCoachProfile(formData: FormData) {
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const user = await currentUser();
   const supabase = await createServerSupabaseClient();
   const context = await getCurrentTeamContext(userId);
 
   const name = (formData.get("name") as string)?.trim();
   const schoolName = (formData.get("schoolName") as string)?.trim();
   const preferredDistanceUnit = normalizeDistanceUnit(formData.get("preferredDistanceUnit"));
+  const primaryEmail = primaryEmailFromClerkUser(user) || context?.coach.email || userId;
 
   if (!name) {
     redirect("/settings?error=Coach%20name%20is%20required.");
@@ -139,7 +141,7 @@ async function saveCoachProfile(formData: FormData) {
     .single();
 
   const payload = {
-    email: userId,
+    email: primaryEmail,
     clerk_id: userId,
     name,
     preferred_distance_unit: preferredDistanceUnit,

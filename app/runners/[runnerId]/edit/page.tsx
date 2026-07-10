@@ -1,4 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
@@ -45,6 +46,19 @@ const MAX_PARENT_INVITES = 10;
 
 function groupColorVar(color: string) {
   return { "--group-color": color } as CSSProperties;
+}
+
+function relationshipLabel(value: string | null) {
+  if (value === "parent_guardian") return "Parent/guardian";
+  if (!value) return "Guardian";
+  return value.replaceAll("_", " ");
+}
+
+function guardianPortalStatus(guardian: PrimaryGuardian | null) {
+  if (!guardian?.email) return { label: "Email needed", className: "border-amber-300/50 bg-amber-400/10 text-amber-100" };
+  if (guardian.portal_enabled === false) return { label: "Portal disabled", className: "border-slate-300/30 bg-white/10 text-slate-200" };
+  if (guardian.clerk_id) return { label: "Linked account", className: "border-[#00ff67]/40 bg-[#00ff67]/10 text-[#bbf7d0]" };
+  return { label: "Invite needed", className: "border-[#00a7ff]/40 bg-[#00a7ff]/10 text-[#bae6fd]" };
 }
 
 async function getTeamAccess(userId: string) {
@@ -151,6 +165,8 @@ async function updateRunner(runnerId: string, formData: FormData) {
     );
   }
 
+  revalidatePath("/runners");
+  revalidatePath(`/runners/${runnerId}/edit`);
   redirect("/runners");
 }
 
@@ -186,6 +202,7 @@ async function rotateRunnerCredentials(runnerId: string) {
     throw new Error(error.message);
   }
 
+  revalidatePath(`/runners/${runnerId}/edit`);
   redirect(`/runners/${runnerId}/edit`);
 }
 
@@ -250,6 +267,7 @@ async function sendParentPortalInvite(runnerId: string, guardianId: string) {
   }
 
   if (primaryGuardian.clerk_id) {
+    revalidatePath(`/runners/${runnerId}/edit`);
     redirect(`/runners/${runnerId}/edit?parentInvite=linked`);
   }
 
@@ -307,6 +325,7 @@ async function sendParentPortalInvite(runnerId: string, guardianId: string) {
     },
   });
 
+  revalidatePath(`/runners/${runnerId}/edit`);
   redirect(`/runners/${runnerId}/edit?parentInvite=sent`);
 }
 
@@ -317,8 +336,8 @@ async function addRunnerGuardian(runnerId: string, formData: FormData) {
   if (!userId) redirect("/");
 
   const supabase = await createServerSupabaseClient();
-  const { teamId } = await getTeamAccess(userId);
-  if (!teamId) redirect("/runners");
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/runners");
 
   const firstName = (formData.get("guardianFirstName") as string)?.trim();
   const lastName = (formData.get("guardianLastName") as string)?.trim();
@@ -352,10 +371,26 @@ async function addRunnerGuardian(runnerId: string, formData: FormData) {
       relationship,
       isPrimary: false,
     });
+
+    await logAuditEvent({
+      teamId,
+      actorCoachId: coachId,
+      actorClerkId: userId,
+      action: "parent_portal.guardian_added",
+      entityType: "guardian_contact",
+      entityId: guardian.id,
+      metadata: {
+        runnerId: runner.id,
+        email,
+        phone,
+        relationship,
+      },
+    });
   } catch (error) {
     redirect(`/runners/${runnerId}/edit?parentInviteError=${encodeURIComponent(error instanceof Error ? error.message : "Could not add guardian.")}`);
   }
 
+  revalidatePath(`/runners/${runnerId}/edit`);
   redirect(`/runners/${runnerId}/edit?guardianSaved=1`);
 }
 
@@ -366,8 +401,8 @@ async function removeRunnerGuardian(runnerId: string, guardianId: string) {
   if (!userId) redirect("/");
 
   const supabase = await createServerSupabaseClient();
-  const { teamId } = await getTeamAccess(userId);
-  if (!teamId) redirect("/runners");
+  const { coachId, teamId } = await getTeamAccess(userId);
+  if (!coachId || !teamId) redirect("/runners");
 
   const { data: runner } = await supabase
     .from("runners")
@@ -384,6 +419,19 @@ async function removeRunnerGuardian(runnerId: string, guardianId: string) {
     .eq("runner_id", runner.id)
     .eq("guardian_id", guardianId);
 
+  await logAuditEvent({
+    teamId,
+    actorCoachId: coachId,
+    actorClerkId: userId,
+    action: "parent_portal.guardian_removed",
+    entityType: "guardian_contact",
+    entityId: guardianId,
+    metadata: {
+      runnerId: runner.id,
+    },
+  });
+
+  revalidatePath(`/runners/${runnerId}/edit`);
   redirect(`/runners/${runnerId}/edit?guardianSaved=1`);
 }
 
@@ -568,39 +616,44 @@ export default async function EditRunnerPage({
           </button>
         </form>
 
-        <section className="mt-6 rounded-xl border border-white/10 bg-white/10 p-5">
-          <div>
+        <section className="mt-6 rounded-xl border border-white/10 bg-white/10 p-5 shadow-2xl shadow-black/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
             <h3 className="font-bold text-white">Parent Portal Access</h3>
             <p className="mt-1 text-sm text-[#cbd5e1]">
-              Add every guardian who should have separate access. Email invites expire in 7 days.
+                Add each parent or guardian who should have separate access. Each invite expires in 7 days.
             </p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#cbd5e1]">
+              {safeGuardianLinks.length} linked
+            </span>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 grid gap-3">
             {safeGuardianLinks.length === 0 ? (
               <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-[#cbd5e1]">
-                No parent portal guardians are linked yet.
+                No guardians are linked yet. Add at least one guardian email to enable parent portal access.
               </div>
             ) : (
               safeGuardianLinks.map((link) => {
                 const guardian = link.guardian_contacts as PrimaryGuardian | null;
                 const guardianName = `${guardian?.first_name || ""} ${guardian?.last_name || ""}`.trim();
                 const guardianEmail = String(guardian?.email || "").trim().toLowerCase();
+                const status = guardianPortalStatus(guardian);
 
                 return (
-                  <div key={link.guardian_id} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <div key={link.guardian_id} className="rounded-xl border border-white/10 bg-white/5 p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
-                        <p className="font-bold text-white">
-                          {guardianName || guardianEmail || guardian?.phone || "Guardian"}
-                          {link.is_primary && <span className="ml-2 rounded-full bg-[#00a7ff]/20 px-2 py-1 text-xs text-[#7dd3fc]">Primary</span>}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-bold text-white">{guardianName || guardianEmail || guardian?.phone || "Guardian"}</p>
+                          {link.is_primary && <span className="rounded-full bg-[#00a7ff]/20 px-2 py-1 text-xs font-bold text-[#7dd3fc]">Primary</span>}
+                          <span className={`rounded-full border px-2 py-1 text-xs font-bold ${status.className}`}>{status.label}</span>
+                        </div>
                         <p className="mt-1 break-all text-sm text-[#cbd5e1]">
                           {guardianEmail || "No portal email"} {guardian?.phone ? `/ ${guardian.phone}` : ""}
                         </p>
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          {guardian?.clerk_id ? "Linked account" : "Invite needed"}
-                        </p>
+                        <p className="mt-1 text-xs font-semibold capitalize text-slate-400">{relationshipLabel(link.relationship)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <form action={sendParentPortalInvite.bind(null, runner.id, link.guardian_id)}>
@@ -629,6 +682,7 @@ export default async function EditRunnerPage({
 
           <form action={addRunnerGuardian.bind(null, runner.id)} className="mt-5 rounded-lg border border-[#00a7ff]/20 bg-[#00a7ff]/10 p-4">
             <h4 className="font-bold text-white">Add Another Guardian</h4>
+            <p className="mt-1 text-sm text-[#cbd5e1]">Use a separate email for each guardian who needs their own account.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <input name="guardianFirstName" type="text" placeholder="First name" className="rounded-lg border border-white/20 bg-white px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]" />
               <input name="guardianLastName" type="text" placeholder="Last name" className="rounded-lg border border-white/20 bg-white px-4 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00a7ff]" />

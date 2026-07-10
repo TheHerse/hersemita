@@ -60,6 +60,14 @@ function sumDistance(activities: Activity[]) {
   return activities.reduce((total, activity) => total + Number(activity.distance_miles || 0), 0);
 }
 
+function activitiesForRunner(activities: Activity[], runnerId: string) {
+  return activities.filter((activity) => activity.runner_id === runnerId);
+}
+
+function latestActivity(activities: Activity[]) {
+  return [...activities].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())[0] || null;
+}
+
 export default async function ParentDashboardPage() {
   const { userId } = await auth();
   if (!userId) redirect("/parent/sign-in");
@@ -138,7 +146,7 @@ export default async function ParentDashboardPage() {
           </section>
         ) : (
           <>
-            <section className="grid gap-4 sm:grid-cols-3">
+            <section className="grid gap-4 sm:grid-cols-4">
               <div className="section-card p-5">
                 <p className="text-sm font-semibold text-slate-500">Last 7 Days</p>
                 <p className="mt-2 text-3xl font-bold text-[#00a7ff]">{formatDistance(sumDistance(lastSevenDays), distanceUnit)}</p>
@@ -150,6 +158,10 @@ export default async function ParentDashboardPage() {
               <div className="section-card p-5">
                 <p className="text-sm font-semibold text-slate-500">Verified Runs</p>
                 <p className="mt-2 text-3xl font-bold text-slate-900">{safeActivities.length}</p>
+              </div>
+              <div className="section-card p-5">
+                <p className="text-sm font-semibold text-slate-500">Linked Runners</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{runners.length}</p>
               </div>
             </section>
 
@@ -201,17 +213,37 @@ export default async function ParentDashboardPage() {
               <aside className="space-y-6">
                 <div className="section-card p-5">
                   <h2 className="text-xl font-bold text-slate-900">Linked Runners</h2>
-                  <div className="mt-4 space-y-3">
+                  <div className="mt-4 grid gap-3">
                     {runners.map((runner) => {
                       const team = teamsById.get(runner.team_id);
+                      const runnerActivities = activitiesForRunner(safeActivities, runner.id);
+                      const recentActivity = latestActivity(runnerActivities);
 
                       return (
                         <Link key={runner.id} href={`/parent/runners/${runner.id}`} className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-[#00a7ff]/40 hover:shadow-sm">
-                          <p className="font-bold text-slate-900">{runnerName(runner)}</p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            Grade {runner.grade ?? "--"} / {team?.school_name || team?.name || "Team"}
-                          </p>
-                          <p className="mt-3 text-xs font-bold uppercase tracking-wide text-[#007ab8]">View Progress</p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-slate-900">{runnerName(runner)}</p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                Grade {runner.grade ?? "--"} / {team?.school_name || team?.name || "Team"}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-[#00a7ff]/10 px-3 py-1 text-xs font-bold text-[#007ab8]">Open</span>
+                          </div>
+                          <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                            <div>
+                              <p className="font-bold text-[#00a7ff]">{formatDistance(sumDistance(runnerActivities), distanceUnit)}</p>
+                              <p className="text-xs text-slate-500">Total</p>
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900">{runnerActivities.length}</p>
+                              <p className="text-xs text-slate-500">Runs</p>
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900">{recentActivity ? formatDate(recentActivity.start_time) : "--"}</p>
+                              <p className="text-xs text-slate-500">Latest</p>
+                            </div>
+                          </div>
                         </Link>
                       );
                     })}

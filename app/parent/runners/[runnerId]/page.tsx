@@ -63,6 +63,18 @@ function sumDistance(activities: Activity[]) {
   return activities.reduce((total, activity) => total + Number(activity.distance_miles || 0), 0);
 }
 
+function averagePace(activities: Activity[]) {
+  const paceValues = activities
+    .map((activity) => activity.pace_per_mile)
+    .filter((pace): pace is number => Boolean(pace));
+  if (paceValues.length === 0) return null;
+  return Math.round(paceValues.reduce((total, pace) => total + pace, 0) / paceValues.length);
+}
+
+function longestRun(activities: Activity[]) {
+  return activities.reduce((longest, activity) => Math.max(longest, Number(activity.distance_miles || 0)), 0);
+}
+
 export default async function ParentRunnerDetailPage({
   params,
 }: {
@@ -115,6 +127,8 @@ export default async function ParentRunnerDetailPage({
     .map((activity) => activity.pace_per_mile)
     .filter((pace): pace is number => Boolean(pace))
     .sort((a, b) => a - b)[0] || null;
+  const latestRun = safeActivities[0] || null;
+  const avgPace = averagePace(safeActivities);
 
   return (
     <div className="min-h-screen hersemita-page-bg">
@@ -130,7 +144,7 @@ export default async function ParentRunnerDetailPage({
           <p className="mt-2 text-[#cbd5e1]">Grade {runner.grade ?? "--"} / verified training updates only</p>
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-4">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="section-card p-5">
             <p className="text-sm font-semibold text-slate-500">7 Days</p>
             <p className="mt-2 text-3xl font-bold text-[#00a7ff]">{formatDistance(sumDistance(lastSevenDays), distanceUnit)}</p>
@@ -149,6 +163,24 @@ export default async function ParentRunnerDetailPage({
           </div>
         </section>
 
+        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+          <div className="section-card p-5">
+            <p className="text-sm font-semibold text-slate-500">Latest Verified Run</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{latestRun ? formatDate(latestRun.start_time) : "--"}</p>
+            <p className="mt-1 text-sm text-slate-500">{latestRun ? `${formatDistance(Number(latestRun.distance_miles || 0), distanceUnit)} at ${formatPace(latestRun.pace_per_mile, distanceUnit)}` : "No verified run yet"}</p>
+          </div>
+          <div className="section-card p-5">
+            <p className="text-sm font-semibold text-slate-500">Average Pace</p>
+            <p className="mt-2 text-2xl font-bold text-[#00a7ff]">{formatPace(avgPace, distanceUnit)}</p>
+            <p className="mt-1 text-sm text-slate-500">Across verified training history</p>
+          </div>
+          <div className="section-card p-5">
+            <p className="text-sm font-semibold text-slate-500">Longest Verified Run</p>
+            <p className="mt-2 text-2xl font-bold text-[#00ff67]">{formatDistance(longestRun(safeActivities), distanceUnit)}</p>
+            <p className="mt-1 text-sm text-slate-500">Shown only after coach approval</p>
+          </div>
+        </section>
+
         <section className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="section-card p-5">
             <h2 className="text-xl font-bold text-slate-900">Training History</h2>
@@ -157,7 +189,35 @@ export default async function ParentRunnerDetailPage({
                 No verified training has been posted yet.
               </div>
             ) : (
-              <div className="mt-4 overflow-x-auto">
+              <>
+                <div className="mt-4 grid gap-3 md:hidden">
+                  {safeActivities.map((activity) => (
+                    <div key={activity.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-slate-900">{formatDate(activity.start_time)}</p>
+                          <p className="mt-1 text-sm text-slate-500">{activity.notes || "Verified by coach"}</p>
+                        </div>
+                        <p className="font-bold text-[#00a7ff]">{formatDistance(Number(activity.distance_miles || 0), distanceUnit)}</p>
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="font-bold text-slate-900">{formatPace(activity.pace_per_mile, distanceUnit)}</p>
+                          <p className="text-xs text-slate-500">Pace</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{activity.training_load ?? "--"}</p>
+                          <p className="text-xs text-slate-500">Load</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{activity.rpe ?? "--"}</p>
+                          <p className="text-xs text-slate-500">RPE</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -183,6 +243,7 @@ export default async function ParentRunnerDetailPage({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 

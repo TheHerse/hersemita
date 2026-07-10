@@ -57,8 +57,8 @@ export default function Home() {
           </div>
         </div>
         
-        {/* Two buttons side by side */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
+        {/* Portal entry points */}
+        <div className="grid gap-4 pt-6 sm:grid-cols-3">
           <Link 
             href="/sign-in"
             className="auth-primary-action group relative bg-gradient-to-r from-[#00ff67] to-[#00a7ff] text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 inline-block text-center shadow-lg shadow-[#00a7ff]/25 hover:shadow-xl hover:shadow-[#00a7ff]/40 hover:scale-105"
@@ -80,6 +80,18 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
               Runner Portal
+            </span>
+          </Link>
+
+          <Link
+            href="/parent"
+            className="group bg-white/10 backdrop-blur-sm border-2 border-[#00a7ff]/50 text-white font-bold py-4 px-8 rounded-xl text-lg transition-all duration-300 inline-block text-center hover:bg-[#00a7ff]/20 hover:border-[#00a7ff] hover:scale-105"
+          >
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-5 h-5 text-[#00a7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m0-4a4 4 0 100-8 4 4 0 000 8zm8 0a4 4 0 100-8 4 4 0 000 8z" />
+              </svg>
+              Parent Portal
             </span>
           </Link>
         </div>
