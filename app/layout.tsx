@@ -59,6 +59,9 @@ export default function RootLayout({
                 <a href="/terms" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
                   Terms
                 </a>
+                <a href="/sms-consent" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+                  SMS Consent
+                </a>
                 <a href="mailto:support@hersemita.com" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
                   support@hersemita.com
                 </a>
