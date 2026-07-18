@@ -10,7 +10,8 @@ export default function SignUpPage() {
         </div>
         
         <SignUp 
-          forceRedirectUrl="/dashboard"
+          fallbackRedirectUrl="/dashboard"
+          signInFallbackRedirectUrl="/dashboard"
           appearance={{
             elements: {
               rootBox: "mx-auto",

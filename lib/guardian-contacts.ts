@@ -38,13 +38,75 @@ export async function syncPrimaryRunnerGuardian({
     return;
   }
 
+  // Parent portal identity should be email-first. Runner phone numbers can be
+  // shared in test data or across families, so do not use a shared phone-only
+  // contact as the record to mutate when a portal email is provided.
+  if (normalizedEmail) {
+    const { data: emailContacts } = await client
+      .from("guardian_contacts")
+      .select("id, email")
+      .eq("team_id", teamId);
+
+    const existingEmailContact = (emailContacts || []).find((contact: { email: string | null }) => {
+      return String(contact.email || "").trim().toLowerCase() === normalizedEmail;
+    });
+
+    const { data: guardian, error } = existingEmailContact?.id
+      ? await client
+          .from("guardian_contacts")
+          .update({
+            email: normalizedEmail,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingEmailContact.id)
+          .eq("team_id", teamId)
+          .select("id")
+          .single()
+      : await client
+          .from("guardian_contacts")
+          .insert({
+            team_id: teamId,
+            email: normalizedEmail,
+            updated_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+    if (error || !guardian?.id) {
+      throw new Error(error?.message || "Could not save guardian contact.");
+    }
+
+    await replacePrimaryGuardianLink({
+      client,
+      runnerId,
+      guardianId: guardian.id,
+    });
+
+    return;
+  }
+
   const guardian = await upsertGuardianContact({
     client,
     teamId,
     phone: normalizedPhone,
-    email: normalizedEmail,
   });
 
+  await replacePrimaryGuardianLink({
+    client,
+    runnerId,
+    guardianId: guardian.id,
+  });
+}
+
+async function replacePrimaryGuardianLink({
+  client,
+  runnerId,
+  guardianId,
+}: {
+  client: SupabaseLikeClient;
+  runnerId: string;
+  guardianId: string;
+}) {
   const { data: currentPrimaryLinks } = await client
     .from("runner_guardians")
     .select("guardian_id")
@@ -54,7 +116,7 @@ export async function syncPrimaryRunnerGuardian({
 
   const oldGuardianIds = (currentPrimaryLinks || [])
     .map((link: { guardian_id: string }) => link.guardian_id)
-    .filter((guardianId: string) => guardianId !== guardian.id);
+    .filter((oldGuardianId: string) => oldGuardianId !== guardianId);
 
   if (oldGuardianIds.length > 0) {
     await client
@@ -67,7 +129,7 @@ export async function syncPrimaryRunnerGuardian({
   await linkGuardianToRunner({
     client,
     runnerId,
-    guardianId: guardian.id,
+    guardianId,
     relationship: "parent_guardian",
     isPrimary: true,
   });

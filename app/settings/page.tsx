@@ -6,12 +6,14 @@ import CoachHeader from "@/components/CoachHeader";
 import { logAuditEvent } from "@/lib/audit-log";
 import { appBaseUrl } from "@/lib/app-url";
 import { normalizeDistanceUnit } from "@/lib/distance-units";
+import { createInviteToken, hashInviteToken } from "@/lib/invite-tokens";
 import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getCurrentTeamContext, getTeamMembers } from "@/lib/team-context";
 
 const INVITE_WINDOW_MS = 60 * 60 * 1000;
 const MAX_INVITE_ACTIONS = 10;
+const INVITE_EXPIRATION_DAYS = 7;
 
 function displayCoachEmail(email: string | null, clerkId: string | null) {
   if (!email || email === clerkId || email.startsWith("user_")) return "No email saved";
@@ -35,31 +37,73 @@ function teamInviteMetadata(teamId: string, coachId: string) {
 
 async function createAssistantInvitation(email: string, teamId: string, coachId: string) {
   const client = await clerkClient();
-  return client.invitations.createInvitation({
+  const token = createInviteToken();
+  const tokenHash = hashInviteToken(token);
+  const expiresAt = new Date(Date.now() + INVITE_EXPIRATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const acceptUrl = `${appBaseUrl()}/invite/coach?token=${encodeURIComponent(token)}`;
+
+  const { data: invite, error } = await supabaseAdmin
+    .from("team_invitations")
+    .insert({
+      team_id: teamId,
+      email,
+      role: "assistant_coach",
+      token_hash: tokenHash,
+      invited_by_coach_id: coachId,
+      expires_at: expiresAt,
+    })
+    .select("id, created_at")
+    .single();
+
+  if (error || !invite?.id) {
+    throw new Error(error?.message || "Could not create the assistant coach invitation.");
+  }
+
+  const clerkInvitation = await client.invitations.createInvitation({
     emailAddress: email,
-    expiresInDays: 7,
+    expiresInDays: INVITE_EXPIRATION_DAYS,
     ignoreExisting: true,
     notify: true,
-    redirectUrl: `${appBaseUrl()}/settings`,
+    redirectUrl: acceptUrl,
     publicMetadata: teamInviteMetadata(teamId, coachId),
   });
+
+  await supabaseAdmin
+    .from("team_invitations")
+    .update({
+      clerk_invitation_id: clerkInvitation.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invite.id);
+
+  return {
+    id: invite.id as string,
+    emailAddress: email,
+    createdAt: invite.created_at as string,
+    expiresAt,
+    clerkInvitationId: clerkInvitation.id,
+    url: clerkInvitation.url || acceptUrl,
+  };
 }
 
 async function getPendingTeamInvitations(teamId: string) {
-  const client = await clerkClient();
-  const invitations = await client.invitations.getInvitationList({ status: "pending", limit: 100 });
+  const { data } = await supabaseAdmin
+    .from("team_invitations")
+    .select("id, email, clerk_invitation_id, created_at, expires_at")
+    .eq("team_id", teamId)
+    .eq("role", "assistant_coach")
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
 
-  return invitations.data
-    .filter((invitation) => {
-      const metadata = invitation.publicMetadata?.hersemitaTeamInvite as { teamId?: string; role?: string } | undefined;
-      return metadata?.teamId === teamId && metadata.role === "assistant_coach";
-    })
-    .map((invitation) => ({
-      id: invitation.id,
-      emailAddress: invitation.emailAddress,
-      createdAt: invitation.createdAt,
-      url: invitation.url || "",
-    }));
+  return (data || []).map((invitation) => ({
+    id: invitation.id as string,
+    emailAddress: invitation.email as string,
+    clerkInvitationId: invitation.clerk_invitation_id as string | null,
+    createdAt: invitation.created_at as string,
+    expiresAt: invitation.expires_at as string,
+  }));
 }
 
 async function applyAcceptedTeamInvite(userId: string) {
@@ -224,10 +268,12 @@ async function addAssistantCoach(formData: FormData) {
       actorCoachId: context.coach.id,
       actorClerkId: userId,
       action: "assistant.invited",
-      entityType: "clerk_invitation",
+      entityType: "team_invitation",
       entityId: invitation.id,
       metadata: {
         email,
+        clerkInvitationId: invitation.clerkInvitationId,
+        expiresAt: invitation.expiresAt,
       },
     });
 
@@ -330,19 +376,58 @@ async function resendAssistantInvitation(formData: FormData) {
   if (!invitationId || !email) redirect("/settings?teamError=Invitation%20could%20not%20be%20resent.");
 
   const client = await clerkClient();
-  await client.invitations.revokeInvitation(invitationId);
-  const invitation = await createAssistantInvitation(email, context.team.id, context.coach.id);
+  const { data: existingInvite } = await supabaseAdmin
+    .from("team_invitations")
+    .select("id, clerk_invitation_id")
+    .eq("id", invitationId)
+    .eq("team_id", context.team.id)
+    .maybeSingle();
+
+  if (!existingInvite?.id) redirect("/settings?teamError=Invitation%20could%20not%20be%20resent.");
+
+  if (existingInvite.clerk_invitation_id) {
+    try {
+      await client.invitations.revokeInvitation(existingInvite.clerk_invitation_id);
+    } catch {
+      // The old Clerk invitation may already be accepted or expired. The Supabase invitation remains authoritative.
+    }
+  }
+
+  const token = createInviteToken();
+  const tokenHash = hashInviteToken(token);
+  const expiresAt = new Date(Date.now() + INVITE_EXPIRATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const acceptUrl = `${appBaseUrl()}/invite/coach?token=${encodeURIComponent(token)}`;
+  const clerkInvitation = await client.invitations.createInvitation({
+    emailAddress: email,
+    expiresInDays: INVITE_EXPIRATION_DAYS,
+    ignoreExisting: true,
+    notify: true,
+    redirectUrl: acceptUrl,
+    publicMetadata: teamInviteMetadata(context.team.id, context.coach.id),
+  });
+
+  await supabaseAdmin
+    .from("team_invitations")
+    .update({
+      token_hash: tokenHash,
+      clerk_invitation_id: clerkInvitation.id,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invitationId)
+    .eq("team_id", context.team.id);
 
   await logAuditEvent({
     teamId: context.team.id,
     actorCoachId: context.coach.id,
     actorClerkId: userId,
     action: "assistant.invite_resent",
-    entityType: "clerk_invitation",
-    entityId: invitation.id,
+    entityType: "team_invitation",
+    entityId: invitationId,
     metadata: {
       email,
-      previousInvitationId: invitationId,
+      clerkInvitationId: clerkInvitation.id,
+      expiresAt,
     },
   });
 
@@ -364,14 +449,38 @@ async function cancelAssistantInvitation(formData: FormData) {
   if (!invitationId) redirect("/settings?teamError=Invitation%20could%20not%20be%20cancelled.");
 
   const client = await clerkClient();
-  await client.invitations.revokeInvitation(invitationId);
+  const { data: existingInvite } = await supabaseAdmin
+    .from("team_invitations")
+    .select("id, clerk_invitation_id")
+    .eq("id", invitationId)
+    .eq("team_id", context.team.id)
+    .maybeSingle();
+
+  if (!existingInvite?.id) redirect("/settings?teamError=Invitation%20could%20not%20be%20cancelled.");
+
+  if (existingInvite.clerk_invitation_id) {
+    try {
+      await client.invitations.revokeInvitation(existingInvite.clerk_invitation_id);
+    } catch {
+      // The old Clerk invitation may already be accepted or expired. Mark the app invite revoked either way.
+    }
+  }
+
+  await supabaseAdmin
+    .from("team_invitations")
+    .update({
+      revoked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invitationId)
+    .eq("team_id", context.team.id);
 
   await logAuditEvent({
     teamId: context.team.id,
     actorCoachId: context.coach.id,
     actorClerkId: userId,
     action: "assistant.invite_canceled",
-    entityType: "clerk_invitation",
+    entityType: "team_invitation",
     entityId: invitationId,
   });
 
@@ -579,13 +688,11 @@ export default async function CoachSettingsPage({
                           <div className="min-w-0">
                             <p className="font-bold text-slate-900">{invitation.emailAddress}</p>
                             <p className="mt-1 text-xs text-slate-500">
-                              Sent {new Date(invitation.createdAt).toLocaleDateString()}
+                              Sent {new Date(invitation.createdAt).toLocaleDateString()} / Expires {new Date(invitation.expiresAt).toLocaleDateString()}
                             </p>
-                            {invitation.url && (
-                              <a href={invitation.url} className="mt-2 block break-all text-sm font-semibold text-[#007ab8] underline">
-                                {invitation.url}
-                              </a>
-                            )}
+                            <p className="mt-2 text-sm text-slate-600">
+                              The email link will add this coach automatically after sign-up or sign-in.
+                            </p>
                           </div>
                           <div className="flex shrink-0 gap-2">
                             <form action={resendAssistantInvitation}>
