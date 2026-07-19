@@ -107,6 +107,34 @@ function attentionClass(flag: string) {
   return "border-[#00a7ff]/30 bg-[#00a7ff]/10 text-[#7dd3fc]";
 }
 
+function priorityScore(row: AthleteRow) {
+  if (row.flag === "Volume spike") return 90;
+  if (row.flag === "Volume drop") return 80;
+  if (row.flag === "Needs verification") return 70;
+  if (row.flag === "No data in view") return 55;
+  if (row.longRun >= 9 || row.miles >= 100) return 50;
+  return 0;
+}
+
+function actionMessage(row: AthleteRow, unitLabel: string) {
+  if (row.flag === "Volume spike") {
+    return `Recent volume is up ${row.loadChange.toFixed(0)}%. Check recovery before assigning another hard day.`;
+  }
+  if (row.flag === "Volume drop") {
+    return `Recent volume is down ${Math.abs(row.loadChange).toFixed(0)}%. Check whether this was planned, missed, or injury-related.`;
+  }
+  if (row.flag === "Needs verification") {
+    return `${Math.round(row.verifiedRate * 100)}% verified in this view. Review uploads before trusting the totals.`;
+  }
+  if (row.flag === "No data in view") {
+    return "No activities in the selected window. Confirm the runner is uploading or adjust the date filter.";
+  }
+  if (row.longRun >= 9 || row.miles >= 100) {
+    return `${row.miles.toFixed(1)} ${unitLabel} in view with a ${row.longRun.toFixed(1)} ${unitLabel} long run. Watch for recovery drift.`;
+  }
+  return "Training looks steady in the selected view.";
+}
+
 export default function CoachAnalyticsWorkbench({
   coachName,
   schoolName,
@@ -275,6 +303,11 @@ export default function CoachAnalyticsWorkbench({
       ? `${selectedIds.size} runner${selectedIds.size === 1 ? "" : "s"} selected`
       : "Entire roster";
   const attentionCount = athleteRows.filter((row) => !["On track", "Pace improving"].includes(row.flag)).length;
+  const actionQueue = [...athleteRows]
+    .map((row) => ({ row, score: priorityScore(row) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || b.row.miles - a.row.miles)
+    .slice(0, 4);
 
   const exportParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -424,6 +457,43 @@ export default function CoachAnalyticsWorkbench({
             <Stat label="Verified" value={`${Math.round(totals.verifiedRate * 100)}%`} accent="#14b8a6" />
           </div>
         </div>
+      </section>
+
+      <section className="mb-6 section-card p-4 sm:p-5">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Coach Action Queue</h3>
+            <p className="mt-1 text-sm text-slate-500">The clearest follow-ups from the current filters, ranked by training risk or missing data.</p>
+          </div>
+          <p className="text-sm font-bold text-[#00a7ff]">{actionQueue.length} item{actionQueue.length === 1 ? "" : "s"}</p>
+        </div>
+
+        {actionQueue.length === 0 ? (
+          <div className="rounded-xl border border-[#00ff67]/20 bg-[#00ff67]/10 p-4 text-sm font-bold text-emerald-700">
+            No obvious action items in this filtered view.
+          </div>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {actionQueue.map(({ row }) => (
+              <article key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-lg font-black text-slate-950">{row.name}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-600">{actionMessage(row, unitLabel)}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-black ${attentionClass(row.flag)}`}>
+                    {row.flag}
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                  <MiniFact label={unitLabel} value={row.miles.toFixed(1)} />
+                  <MiniFact label="Runs" value={String(row.runs)} />
+                  <MiniFact label="Long" value={`${row.longRun.toFixed(1)} ${unitLabel}`} />
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mb-6 grid gap-6 lg:grid-cols-2">
@@ -584,6 +654,15 @@ function Stat({ label, value, accent }: { label: string; value: string; accent: 
       <p className="mt-2 text-2xl font-bold" style={{ color: accent }}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function MiniFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 font-black text-slate-950">{value}</p>
     </div>
   );
 }

@@ -51,14 +51,33 @@ function recoveryTone(row: LoadRecoveryRow) {
   return { label: "Logged", color: "#00ff67" };
 }
 
+function combinedRiskTone(row: LoadRecoveryRow) {
+  const severeAlert = row.highestAlertSeverity === "critical" || row.highestAlertSeverity === "high";
+  const recoveryRisk = row.illness || row.hrvStatus === "poor" || row.hrvStatus === "low" || (row.soreness != null && row.soreness >= 8);
+  const highTrainingStress = (row.acwrRatio != null && row.acwrRatio >= 1.3) || (row.strain != null && row.strain >= 900);
+
+  if (severeAlert || (recoveryRisk && highTrainingStress)) {
+    return { label: "Review today", color: "#ef4444" };
+  }
+  if (recoveryRisk || highTrainingStress || row.hrvStatus === "unbalanced") {
+    return { label: "Watch", color: "#f59e0b" };
+  }
+  if (!row.latestRecoveryDate && row.acwrRatio != null) {
+    return { label: "Need check-in", color: "#7dd3fc" };
+  }
+  return { label: "Clear", color: "#00ff67" };
+}
+
 export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecoveryRow[] }) {
   const sortedRows = [...rows].sort((a, b) => {
-    const aRisk = (a.alertCount > 0 ? 100 : 0) + (a.acwrRatio || 0) * 10 + (a.illness ? 50 : 0);
-    const bRisk = (b.alertCount > 0 ? 100 : 0) + (b.acwrRatio || 0) * 10 + (b.illness ? 50 : 0);
+    const aCombined = combinedRiskTone(a).label === "Review today" ? 200 : combinedRiskTone(a).label === "Watch" ? 100 : 0;
+    const bCombined = combinedRiskTone(b).label === "Review today" ? 200 : combinedRiskTone(b).label === "Watch" ? 100 : 0;
+    const aRisk = aCombined + (a.alertCount > 0 ? 100 : 0) + (a.acwrRatio || 0) * 10 + (a.illness ? 50 : 0);
+    const bRisk = bCombined + (b.alertCount > 0 ? 100 : 0) + (b.acwrRatio || 0) * 10 + (b.illness ? 50 : 0);
     return bRisk - aRisk;
   });
 
-  const highLoadCount = rows.filter((row) => row.acwrRatio != null && row.acwrRatio > 1.3).length;
+  const reviewTodayCount = rows.filter((row) => combinedRiskTone(row).label === "Review today").length;
   const recoveryWatchCount = rows.filter((row) => {
     return row.illness || row.hrvStatus === "low" || row.hrvStatus === "poor" || row.hrvStatus === "unbalanced";
   }).length;
@@ -79,7 +98,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
-          <MiniStat label="High Load" value={String(highLoadCount)} color="#f59e0b" />
+          <MiniStat label="Review" value={String(reviewTodayCount)} color="#ef4444" />
           <MiniStat label="Recovery" value={String(recoveryWatchCount)} color="#ef4444" />
           <MiniStat label="Alerts" value={String(openAlerts)} color="#00a7ff" />
         </div>
@@ -89,6 +108,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
         {sortedRows.map((row) => {
           const load = loadTone(row.loadStatus, row.acwrRatio);
           const recovery = recoveryTone(row);
+          const risk = combinedRiskTone(row);
           return (
             <article key={row.runnerId} className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -96,7 +116,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
                   <h4 className="font-bold text-white">{row.runnerName}</h4>
                   <p className="mt-1 text-sm text-slate-400">{formatDate(row.latestRecoveryDate)}</p>
                 </div>
-                <StatusPill label={load.label} color={load.color} />
+                <StatusPill label={risk.label} color={risk.color} />
               </div>
               <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
                 <CompactStat label="ACWR" value={formatNumber(row.acwrRatio, 2)} />
@@ -105,6 +125,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
               </dl>
               <div className="mt-4 flex flex-wrap gap-2">
                 <StatusPill label={recovery.label} color={recovery.color} />
+                <StatusPill label={load.label} color={load.color} />
                 {row.alertCount > 0 && <StatusPill label={`${row.alertCount} alert${row.alertCount === 1 ? "" : "s"}`} color="#00a7ff" />}
               </div>
             </article>
@@ -118,6 +139,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
             <tr className="border-b border-slate-200 bg-slate-50/60">
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Runner</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">ACWR</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-700">Risk</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Load</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Acute</th>
               <th className="px-4 py-3 text-center font-semibold text-slate-700">Chronic</th>
@@ -131,6 +153,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
             {sortedRows.map((row) => {
               const load = loadTone(row.loadStatus, row.acwrRatio);
               const recovery = recoveryTone(row);
+              const risk = combinedRiskTone(row);
               return (
                 <tr key={row.runnerId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                   <td className="px-4 py-3">
@@ -138,6 +161,7 @@ export default function TrainingLoadRecoveryPanel({ rows }: { rows: LoadRecovery
                     <div className="mt-1 text-xs text-slate-500">{formatDate(row.latestRecoveryDate)}</div>
                   </td>
                   <td className="px-4 py-3 text-center font-bold text-slate-900">{formatNumber(row.acwrRatio, 2)}</td>
+                  <td className="px-4 py-3 text-center"><StatusPill label={risk.label} color={risk.color} /></td>
                   <td className="px-4 py-3 text-center"><StatusPill label={load.label} color={load.color} /></td>
                   <td className="px-4 py-3 text-center text-slate-700">{formatNumber(row.acuteLoad)}</td>
                   <td className="px-4 py-3 text-center text-slate-700">{formatNumber(row.chronicLoad)}</td>

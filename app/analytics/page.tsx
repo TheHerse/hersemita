@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import CoachHeader from "@/components/CoachHeader";
 import CoachAnalyticsWorkbench from "@/components/CoachAnalyticsWorkbench";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getParentPortalContext } from "@/lib/parent-context";
 import { ensureDefaultRunnerGroups } from "@/lib/runner-groups";
 import { getCurrentTeamContext } from "@/lib/team-context";
 
@@ -17,8 +18,13 @@ export default async function AnalyticsPage() {
     .eq("clerk_id", userId)
     .single();
   const teamContext = await getCurrentTeamContext(userId);
+  if (!teamContext) {
+    const parentContext = await getParentPortalContext(userId);
+    redirect(parentContext?.runners.length ? "/parent/dashboard" : "/settings");
+  }
+
   const legacyCoachId = teamContext?.team.owner_coach_id || teamContext?.coach.id || coach?.id;
-  const teamId = teamContext?.team.id;
+  const teamId = teamContext.team.id;
 
   if (legacyCoachId && teamId) {
     await ensureDefaultRunnerGroups(legacyCoachId, supabase, teamId);
