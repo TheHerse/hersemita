@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 type RunnerOption = {
   id: string;
@@ -23,28 +23,40 @@ export default function MessageParentsForm({
   action,
 }: MessageParentsFormProps) {
   const defaultSelectedIds = useMemo(() => runnersWithPhone.map((runner) => runner.id), [runnersWithPhone]);
-  const [selectedIds, setSelectedIds] = useState(defaultSelectedIds);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   const selectedSet = new Set(selectedIds);
   const hasRecipients = runnersWithPhone.length > 0;
   const allSelected = hasRecipients && selectedIds.length === runnersWithPhone.length;
+  const selectedRunners = runnersWithPhone.filter((runner) => selectedSet.has(runner.id));
 
   function toggleAll() {
+    setIsConfirming(false);
     setSelectedIds(allSelected ? [] : defaultSelectedIds);
   }
 
   function toggleRunner(runnerId: string) {
+    setIsConfirming(false);
     setSelectedIds((current) =>
       current.includes(runnerId) ? current.filter((id) => id !== runnerId) : [...current, runnerId]
     );
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!isConfirming) {
+      event.preventDefault();
+      setIsConfirming(true);
+    }
+  }
+
   return (
-    <form action={action} className="space-y-6">
+    <form action={action} onSubmit={handleSubmit} className="space-y-6">
       <div>
         <label className="mb-2 block text-sm font-semibold text-slate-700">Message Type</label>
         <select
           name="type"
+          onChange={() => setIsConfirming(false)}
           className="w-full rounded-lg border-2 border-slate-200 bg-white px-4 py-2 text-slate-900 transition-colors focus:border-[#00a7ff] focus:outline-none"
         >
           <option value="general">General Update</option>
@@ -127,10 +139,30 @@ export default function MessageParentsForm({
           required
           maxLength={320}
           placeholder="Practice moved to 4pm today due to weather..."
+          onChange={() => setIsConfirming(false)}
           className="h-32 w-full resize-none rounded-lg border-2 border-slate-200 p-4 text-slate-900 transition-colors focus:border-[#00a7ff] focus:outline-none"
         />
         <p className="mt-1 text-xs text-slate-500">320 character limit for SMS</p>
       </div>
+
+      {isConfirming && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-black">Confirm before sending</p>
+          <p className="mt-1">
+            This will send to {selectedIds.length} selected parent phone number{selectedIds.length === 1 ? "" : "s"}.
+          </p>
+          <div className="mt-3 max-h-28 overflow-y-auto rounded-lg border border-amber-200 bg-white/70 p-2">
+            {selectedRunners.map((runner) => (
+              <p key={runner.id} className="text-xs font-semibold text-amber-950">
+                {runner.last_name}, {runner.first_name}
+              </p>
+            ))}
+          </div>
+          <p className="mt-3 text-xs font-semibold">
+            Press the send button again to confirm. If Twilio live sending is disabled, Hersemita will only prepare the message.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <button
@@ -138,7 +170,7 @@ export default function MessageParentsForm({
           disabled={selectedIds.length === 0}
           className="flex-1 rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] py-3 font-bold text-white transition-all hover:shadow-lg hover:shadow-[#00a7ff]/25 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Send to Selected Parents
+          {isConfirming ? "Confirm and Send" : "Review Selected Parents"}
         </button>
         <Link
           href="/dashboard"

@@ -17,8 +17,54 @@ type AuditLog = {
   created_at: string;
 };
 
-function formatAction(value: string) {
-  return value.replaceAll("_", " ").replaceAll(".", " / ");
+type LookupRecord = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+};
+
+function actionLabel(value: string) {
+  const labels: Record<string, string> = {
+    "assistant.invited": "Assistant invite sent",
+    "assistant.invite_resent": "Assistant invite resent",
+    "assistant.invite_canceled": "Assistant invite canceled",
+    "assistant.invite_accepted": "Assistant invite accepted",
+    "assistant.added": "Assistant coach added",
+    "assistant.removed": "Assistant coach removed",
+    "parent_message.sent": "Parent message sent",
+    "parent_portal.invited": "Parent invite sent",
+    "parent_portal.linked_existing_account": "Parent account linked",
+    "parent_portal.guardian_added": "Guardian added",
+    "parent_portal.guardian_removed": "Guardian removed",
+    "activity.verified": "Activity verified",
+    "activity.rejected": "Activity rejected",
+    "runner.created": "Runner added",
+    "runner.updated": "Runner updated",
+    "runner.deleted": "Runner deleted",
+  };
+
+  return labels[value] || value.replaceAll("_", " ").replaceAll(".", " / ");
+}
+
+function actionGroup(value: string) {
+  if (value.startsWith("assistant.")) return "Team access";
+  if (value.startsWith("parent_")) return "Parent access";
+  if (value.startsWith("activity.")) return "Activity review";
+  if (value.startsWith("runner.")) return "Roster";
+  return "System";
+}
+
+function actionTone(value: string) {
+  if (value.includes("canceled") || value.includes("removed") || value.includes("rejected") || value.includes("deleted")) {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  if (value.includes("sent") || value.includes("invited")) return "border-sky-200 bg-sky-50 text-sky-700";
+  if (value.includes("accepted") || value.includes("added") || value.includes("linked") || value.includes("verified")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 function formatDate(value: string) {
@@ -31,14 +77,64 @@ function formatDate(value: string) {
   });
 }
 
-function metadataSummary(metadata: Record<string, unknown>) {
-  const entries = Object.entries(metadata || {});
-  if (entries.length === 0) return "No extra details";
+function shortReference(value: string | null) {
+  return value ? value.slice(0, 8) : null;
+}
 
-  return entries
-    .slice(0, 5)
-    .map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : String(value)}`)
-    .join(" / ");
+function getString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function displayName(record?: LookupRecord | null) {
+  if (!record) return null;
+  const fullName = [record.first_name, record.last_name].filter(Boolean).join(" ").trim();
+  return record.name || fullName || record.email || null;
+}
+
+function detailItems(
+  log: AuditLog,
+  runnersById: Map<string, LookupRecord>,
+  guardiansById: Map<string, LookupRecord>
+) {
+  const metadata = log.metadata || {};
+  const items: string[] = [];
+
+  const runnerId = getString(metadata, "runnerId") || (log.entity_type === "runner" ? log.entity_id : null);
+  const guardianId = log.entity_type === "guardian_contact" ? log.entity_id : getString(metadata, "guardianId");
+  const email = getString(metadata, "email") || getString(metadata, "guardianEmail") || getString(metadata, "invitedEmail");
+  const messageType = getString(metadata, "messageType");
+  const runnerCount = metadata.runnerCount;
+  const phoneCount = metadata.phoneCount;
+  const success = metadata.success;
+  const mock = metadata.mock;
+
+  if (runnerId) {
+    items.push(`Runner: ${displayName(runnersById.get(runnerId)) || `reference ${shortReference(runnerId)}`}`);
+  }
+
+  if (guardianId) {
+    items.push(`Guardian: ${displayName(guardiansById.get(guardianId)) || `reference ${shortReference(guardianId)}`}`);
+  }
+
+  if (email) items.push(`Email: ${email}`);
+  if (messageType) items.push(`Message type: ${messageType}`);
+  if (typeof runnerCount === "number") items.push(`Runners selected: ${runnerCount}`);
+  if (typeof phoneCount === "number") items.push(`Phone numbers: ${phoneCount}`);
+  if (typeof success === "boolean") items.push(success ? "Delivery accepted by provider" : "Delivery did not complete");
+  if (mock === true) items.push("Prepared only; live SMS was not sent");
+
+  return items.length ? items : ["No extra details recorded"];
+}
+
+function collectIds(logs: AuditLog[], key: string, entityType: string) {
+  return Array.from(
+    new Set(
+      logs
+        .map((log) => getString(log.metadata || {}, key) || (log.entity_type === entityType ? log.entity_id : null))
+        .filter(Boolean)
+    )
+  ) as string[];
 }
 
 export default async function AuditLogPage() {
@@ -58,6 +154,9 @@ export default async function AuditLogPage() {
 
   const safeLogs = (logs || []) as AuditLog[];
   const actorIds = Array.from(new Set(safeLogs.map((log) => log.actor_coach_id).filter(Boolean))) as string[];
+  const runnerIds = collectIds(safeLogs, "runnerId", "runner");
+  const guardianIds = collectIds(safeLogs, "guardianId", "guardian_contact");
+
   const { data: coaches } = actorIds.length
     ? await supabaseAdmin
         .from("coaches")
@@ -65,6 +164,28 @@ export default async function AuditLogPage() {
         .in("id", actorIds)
     : { data: [] };
   const coachesById = new Map((coaches || []).map((coach) => [coach.id, coach]));
+  const { data: runners } = runnerIds.length
+    ? await supabaseAdmin
+        .from("runners")
+        .select("id, first_name, last_name")
+        .eq("team_id", context.team.id)
+        .in("id", runnerIds)
+    : { data: [] };
+  const runnersById = new Map(((runners || []) as LookupRecord[]).map((runner) => [runner.id, runner]));
+  const { data: guardians } = guardianIds.length
+    ? await supabaseAdmin
+        .from("guardian_contacts")
+        .select("id, first_name, last_name, email")
+        .eq("team_id", context.team.id)
+        .in("id", guardianIds)
+    : { data: [] };
+  const guardiansById = new Map(((guardians || []) as LookupRecord[]).map((guardian) => [guardian.id, guardian]));
+
+  const summaryCounts = safeLogs.reduce<Record<string, number>>((counts, log) => {
+    const group = actionGroup(log.action);
+    counts[group] = (counts[group] || 0) + 1;
+    return counts;
+  }, {});
 
   return (
     <div className="min-h-screen hersemita-page-bg text-white">
@@ -82,48 +203,58 @@ export default async function AuditLogPage() {
           </p>
         </section>
 
-        <section className="section-card overflow-hidden p-4 sm:p-5">
+        {safeLogs.length > 0 && (
+          <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {Object.entries(summaryCounts).map(([group, count]) => (
+              <div key={group} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{group}</p>
+                <p className="mt-2 text-2xl font-black text-slate-950">{count}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section className="section-card p-4 sm:p-5">
           {safeLogs.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
               No audit events yet.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700 bg-slate-900/50 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-3">Time</th>
-                    <th className="px-4 py-3">Action</th>
-                    <th className="px-4 py-3">Actor</th>
-                    <th className="px-4 py-3">Entity</th>
-                    <th className="px-4 py-3">Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {safeLogs.map((log) => {
-                    const actor = log.actor_coach_id ? coachesById.get(log.actor_coach_id) : null;
+            <div className="space-y-3">
+              {safeLogs.map((log) => {
+                const actor = log.actor_coach_id ? coachesById.get(log.actor_coach_id) : null;
+                const actorName = actor?.name || actor?.email || log.actor_clerk_id || "System";
+                const details = detailItems(log, runnersById, guardiansById);
 
-                    return (
-                      <tr key={log.id} className="border-b border-slate-800 last:border-0">
-                        <td className="px-4 py-3 font-semibold text-slate-200">{formatDate(log.created_at)}</td>
-                        <td className="px-4 py-3">
-                          <span className="rounded-full border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-1 text-xs font-bold capitalize text-[#7dd3fc]">
-                            {formatAction(log.action)}
+                return (
+                  <article key={log.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full border px-3 py-1 text-xs font-black ${actionTone(log.action)}`}>
+                            {actionGroup(log.action)}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-300">
-                          {actor?.name || actor?.email || log.actor_clerk_id || "System"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-300">
-                          <span className="font-bold capitalize text-slate-100">{log.entity_type}</span>
-                          {log.entity_id && <span className="block text-xs text-slate-500">{log.entity_id}</span>}
-                        </td>
-                        <td className="px-4 py-3 text-slate-400">{metadataSummary(log.metadata)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <span className="text-xs font-semibold text-slate-500">{formatDate(log.created_at)}</span>
+                        </div>
+                        <h3 className="mt-3 text-lg font-black text-slate-950">{actionLabel(log.action)}</h3>
+                        <p className="mt-1 text-sm text-slate-600">By {actorName}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+                        {log.entity_type.replaceAll("_", " ")}
+                        {log.entity_id && <span className="ml-1 text-slate-400">#{shortReference(log.entity_id)}</span>}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {details.map((detail) => (
+                        <p key={detail} className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                          {detail}
+                        </p>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>

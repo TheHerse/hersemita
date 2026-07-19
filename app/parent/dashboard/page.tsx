@@ -35,6 +35,10 @@ function runnerName(runner: { first_name: string; last_name: string }) {
   return `${runner.first_name} ${runner.last_name}`.trim();
 }
 
+function runnerPortalPath(runner: { id: string; username?: string | null }) {
+  return `/parent/runners/${encodeURIComponent(runner.username || runner.id)}`;
+}
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("en-US", {
     month: "short",
@@ -220,7 +224,7 @@ export default async function ParentDashboardPage() {
                       const recentActivity = latestActivity(runnerActivities);
 
                       return (
-                        <Link key={runner.id} href={`/parent/runners/${runner.id}`} className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-[#00a7ff]/40 hover:shadow-sm">
+                        <Link key={runner.id} href={runnerPortalPath(runner)} className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-[#00a7ff]/40 hover:shadow-sm">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-bold text-slate-900">{runnerName(runner)}</p>

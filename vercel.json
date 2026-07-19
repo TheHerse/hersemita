@@ -3,6 +3,10 @@
     {
       "path": "/api/maintenance/rate-limits",
       "schedule": "17 9 * * *"
+    },
+    {
+      "path": "/api/maintenance/screenshots",
+      "schedule": "43 9 * * 0"
     }
   ]
 }

@@ -27,11 +27,14 @@ type Alert = {
 type RecoveryLog = {
   id: string;
   log_date: string;
-  sleep_hours: number | null;
-  stress_level: number | null;
+  hrv_ms: number | string | null;
+  hrv_status: string | null;
   soreness: number | null;
-  hrv: number | null;
   resting_hr: number | null;
+  sleep_score: number | null;
+  sleep_duration_min: number | null;
+  body_battery: number | null;
+  illness: boolean | null;
 };
 
 function runnerName(runner: { first_name: string; last_name: string }) {
@@ -75,6 +78,20 @@ function longestRun(activities: Activity[]) {
   return activities.reduce((longest, activity) => Math.max(longest, Number(activity.distance_miles || 0)), 0);
 }
 
+function formatSleep(minutes: number | null) {
+  if (!minutes) return "--";
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  if (remaining === 0) return `${hours}h`;
+  return `${hours}h ${remaining}m`;
+}
+
+function formatHrv(value: number | string | null) {
+  if (value == null) return "--";
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? `${Math.round(numberValue)} ms` : "--";
+}
+
 export default async function ParentRunnerDetailPage({
   params,
 }: {
@@ -85,7 +102,10 @@ export default async function ParentRunnerDetailPage({
 
   const { runnerId } = await params;
   const context = await getParentPortalContext(userId);
-  const runner = context?.runners.find((item) => item.id === runnerId);
+  const decodedRunnerId = decodeURIComponent(runnerId).toLowerCase();
+  const runner = context?.runners.find(
+    (item) => item.id === runnerId || String(item.username || "").toLowerCase() === decodedRunnerId
+  );
   if (!runner) redirect("/parent/dashboard");
 
   const [{ data: team }, { data: activities }, { data: alerts }, { data: recoveryLogs }] = await Promise.all([
@@ -110,7 +130,7 @@ export default async function ParentRunnerDetailPage({
       .limit(8),
     supabaseAdmin
       .from("recovery_logs")
-      .select("id, log_date, sleep_hours, stress_level, soreness, hrv, resting_hr")
+      .select("id, log_date, hrv_ms, hrv_status, resting_hr, sleep_score, sleep_duration_min, body_battery, soreness, illness")
       .eq("runner_id", runner.id)
       .order("log_date", { ascending: false })
       .limit(10),
@@ -275,10 +295,12 @@ export default async function ParentRunnerDetailPage({
                     <div key={log.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                       <p className="font-bold text-slate-900">{formatDate(log.log_date)}</p>
                       <p className="mt-2 text-sm text-slate-600">
-                        Sleep {log.sleep_hours ?? "--"}h / Stress {log.stress_level ?? "--"} / Soreness {log.soreness ?? "--"}
+                        Sleep {formatSleep(log.sleep_duration_min)} / Score {log.sleep_score ?? "--"} / Soreness {log.soreness ?? "--"}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        HRV {log.hrv ?? "--"} / Resting HR {log.resting_hr ?? "--"}
+                        HRV {formatHrv(log.hrv_ms)} / {log.hrv_status || "No status"} / Resting HR {log.resting_hr ?? "--"}
+                        {log.body_battery != null ? ` / Body battery ${log.body_battery}` : ""}
+                        {log.illness ? " / Illness noted" : ""}
                       </p>
                     </div>
                   ))}

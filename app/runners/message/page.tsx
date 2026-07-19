@@ -6,6 +6,7 @@ import { sendMassSMS } from "@/lib/twilio";
 import CoachHeader from "@/components/CoachHeader";
 import MessageParentsForm from "@/components/MessageParentsForm";
 import { logAuditEvent } from "@/lib/audit-log";
+import { logParentMessage } from "@/lib/parent-message-log";
 import { getCurrentTeamContext } from "@/lib/team-context";
 
 async function sendMessage(formData: FormData) {
@@ -37,7 +38,7 @@ async function sendMessage(formData: FormData) {
   
   const { data: runners } = await supabase
     .from("runners")
-    .select("first_name, last_name, parent_phone")
+    .select("id, first_name, last_name, parent_phone")
     .eq("team_id", teamId)
     .in("id", selectedRunners)
     .not("parent_phone", "is", null);
@@ -52,6 +53,23 @@ async function sendMessage(formData: FormData) {
     phones,
     `${teamContext?.team.school_name || teamContext?.team.name ? `${teamContext?.team.school_name || teamContext?.team.name} - ` : ""}Coach ${coach?.name || ""}: ${message}`.trim()
   );
+  const status = result.success ? "sent" : result.mock ? "mock" : "error";
+
+  await logParentMessage({
+    teamId,
+    coachId: teamContext?.coach.id || coach.id,
+    messageType,
+    body: message,
+    status,
+    mock: Boolean(result.mock),
+    errorMessage: result.success ? null : result.error || null,
+    runnerCount: selectedRunners.length,
+    recipients: (runners || []).map((runner) => ({
+      runnerId: runner.id,
+      runnerName: `${runner.first_name} ${runner.last_name}`.trim(),
+      parentPhone: runner.parent_phone,
+    })),
+  });
 
   await logAuditEvent({
     teamId,
@@ -68,7 +86,6 @@ async function sendMessage(formData: FormData) {
     },
   });
   
-  const status = result.success ? "sent" : result.mock ? "mock" : "error";
   redirect(`/runners/message?status=${status}&count=${phones.length}&type=${messageType}`);
 }
 
@@ -120,6 +137,12 @@ export default async function MessageParentsPage({
             <p className="text-slate-600 mb-6 sm:ml-11">
               {runnersWithPhone.length} of {runnerCount} runners have parent phone numbers
             </p>
+            <Link
+              href="/runners/message/history"
+              className="mb-6 inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            >
+              View message history
+            </Link>
 
             {params?.status && (
               <div className={`mb-6 rounded-lg border p-4 text-sm ${
@@ -160,7 +183,7 @@ export default async function MessageParentsPage({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <b>Note:</b> Parent texting requires Twilio credentials and verification to be approved for live sending.
+                <b>Note:</b> Parent texting requires Twilio credentials, account approval, and <code className="rounded bg-orange-100 px-1 font-mono">TWILIO_SMS_ENABLED=true</code> before Hersemita sends live SMS.
               </p>
             </div>
           </div>

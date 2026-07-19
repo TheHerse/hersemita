@@ -18,6 +18,7 @@ export type ParentRunner = {
   first_name: string;
   last_name: string;
   grade: number | null;
+  username: string | null;
 };
 
 export type ParentPortalContext = {
@@ -87,7 +88,7 @@ export async function getParentPortalContext(userId: string): Promise<ParentPort
   const guardianIds = safeGuardians.map((guardian) => guardian.id);
   const { data: runnerLinks } = await supabaseAdmin
     .from("runner_guardians")
-    .select("runners(id, team_id, first_name, last_name, grade)")
+    .select("runners(id, team_id, first_name, last_name, grade, username)")
     .in("guardian_id", guardianIds);
 
   const runnersById = new Map<string, ParentRunner>();

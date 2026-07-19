@@ -2,14 +2,19 @@ export async function sendMassSMS(
   parentPhones: string[],
   message: string
 ) {
+  const liveSendingEnabled = process.env.TWILIO_SMS_ENABLED === "true";
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_PHONE_NUMBER;
   
-  if (!accountSid || !authToken || !fromNumber) {
-    console.log('Twilio not configured - would send to', parentPhones.length, 'parents:');
-    console.log('Message:', message);
-    return { success: false, error: 'Twilio not configured', mock: true };
+  if (!liveSendingEnabled || !accountSid || !authToken || !fromNumber) {
+    console.log("Twilio live sending disabled or not configured - would send to", parentPhones.length, "parents:");
+    console.log("Message:", message);
+    return {
+      success: false,
+      error: liveSendingEnabled ? "Twilio not configured" : "Twilio live sending disabled",
+      mock: true,
+    };
   }
 
   try {
