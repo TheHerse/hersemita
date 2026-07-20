@@ -28,6 +28,20 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString("en-US");
 }
 
+type SummaryActivityRow = {
+  id: string;
+  runner_id: string;
+  distance_miles: number | string | null;
+  pace_per_mile: number | string | null;
+  start_time: string | null;
+  verified: boolean | null;
+  training_load: number | string | null;
+  rpe: number | string | null;
+  soreness: number | string | null;
+  illness: boolean | null;
+  notes: string | null;
+};
+
 export async function GET(request: Request) {
   const { userId } = await auth();
   if (!userId) {
@@ -76,7 +90,7 @@ export async function GET(request: Request) {
   }
 
   const runnerIds = (runners || []).map((runner) => runner.id);
-  let activities: any[] = [];
+  let activities: SummaryActivityRow[] = [];
 
   if (runnerIds.length > 0) {
     let activityQuery = supabase
@@ -99,7 +113,7 @@ export async function GET(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    activities = data || [];
+    activities = (data || []) as SummaryActivityRow[];
   }
 
   const byRunner = new Map<string, typeof activities>();

@@ -103,9 +103,10 @@ export default async function ParentRunnerDetailPage({
   const { runnerId } = await params;
   const context = await getParentPortalContext(userId);
   const decodedRunnerId = decodeURIComponent(runnerId).toLowerCase();
-  const runner = context?.runners.find(
-    (item) => item.id === runnerId || String(item.username || "").toLowerCase() === decodedRunnerId
-  );
+  const runner = context?.runners.find((item) => {
+    const username = String(item.username || "").toLowerCase();
+    return username ? username === decodedRunnerId : item.id === runnerId;
+  });
   if (!runner) redirect("/parent/dashboard");
 
   const [{ data: team }, { data: activities }, { data: alerts }, { data: recoveryLogs }] = await Promise.all([

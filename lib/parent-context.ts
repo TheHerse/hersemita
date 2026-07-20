@@ -28,6 +28,10 @@ export type ParentPortalContext = {
   runners: ParentRunner[];
 };
 
+type RunnerLinkRow = {
+  runners: ParentRunner | ParentRunner[] | null;
+};
+
 function normalizedEmails(user: Awaited<ReturnType<typeof currentUser>>) {
   return Array.from(
     new Set(
@@ -94,7 +98,7 @@ export async function getParentPortalContext(userId: string): Promise<ParentPort
   const runnersById = new Map<string, ParentRunner>();
 
   (runnerLinks || [])
-    .map((link: any) => (Array.isArray(link.runners) ? link.runners[0] : link.runners))
+    .map((link: RunnerLinkRow) => (Array.isArray(link.runners) ? link.runners[0] : link.runners))
     .filter((runner): runner is ParentRunner => Boolean(runner?.id))
     .forEach((runner) => {
       runnersById.set(runner.id, runner);

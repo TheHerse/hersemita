@@ -48,6 +48,18 @@ type Activity = {
   detected_app: string | null;
 };
 
+type RunnerRiskSignal = {
+  runner_id: string;
+  acwr_ratio: number | null;
+  strain: number | null;
+  load_status: string | null;
+  hrv_status: string | null;
+  soreness: number | null;
+  sleep_score: number | null;
+  alert_count: number;
+  highest_alert_severity: string | null;
+};
+
 type AthleteRow = {
   id: string;
   name: string;
@@ -61,6 +73,9 @@ type AthleteRow = {
   consistency: number;
   verifiedRate: number;
   flag: string;
+  riskFlag: string | null;
+  riskMessage: string | null;
+  riskScore: number;
 };
 
 const DATE_WINDOWS = [
@@ -101,6 +116,8 @@ function median(values: number[]) {
 }
 
 function attentionClass(flag: string) {
+  if (flag === "Review today" || flag === "Recovery watch") return "border-red-400/30 bg-red-400/10 text-red-300";
+  if (flag === "Load watch" || flag === "Open alert") return "border-orange-400/30 bg-orange-400/10 text-orange-300";
   if (flag === "No data in view" || flag === "Needs verification") return "border-orange-400/30 bg-orange-400/10 text-orange-300";
   if (flag === "Volume spike" || flag === "Volume drop") return "border-red-400/30 bg-red-400/10 text-red-300";
   if (flag === "Pace improving") return "border-[#00ff67]/30 bg-[#00ff67]/10 text-[#86efac]";
@@ -108,6 +125,7 @@ function attentionClass(flag: string) {
 }
 
 function priorityScore(row: AthleteRow) {
+  if (row.riskScore >= 100) return row.riskScore;
   if (row.flag === "Volume spike") return 90;
   if (row.flag === "Volume drop") return 80;
   if (row.flag === "Needs verification") return 70;
@@ -117,6 +135,7 @@ function priorityScore(row: AthleteRow) {
 }
 
 function actionMessage(row: AthleteRow, unitLabel: string) {
+  if (row.riskMessage) return row.riskMessage;
   if (row.flag === "Volume spike") {
     return `Recent volume is up ${row.loadChange.toFixed(0)}%. Check recovery before assigning another hard day.`;
   }
@@ -135,6 +154,51 @@ function actionMessage(row: AthleteRow, unitLabel: string) {
   return "Training looks steady in the selected view.";
 }
 
+function riskFromSignal(signal?: RunnerRiskSignal) {
+  if (!signal) {
+    return { riskFlag: null, riskMessage: null, riskScore: 0 };
+  }
+
+  const criticalAlert = signal.highest_alert_severity === "critical";
+  const highAlert = signal.highest_alert_severity === "high";
+  const recoveryRisk = signal.hrv_status === "poor" || signal.hrv_status === "low" || (signal.soreness != null && signal.soreness >= 8);
+  const highStress = (signal.acwr_ratio != null && signal.acwr_ratio >= 1.3) || (signal.strain != null && signal.strain >= 900);
+
+  if (criticalAlert || (recoveryRisk && highStress)) {
+    return {
+      riskFlag: "Review today",
+      riskMessage: "Recovery and training stress are both elevated. Check this runner before assigning another hard effort.",
+      riskScore: 160,
+    };
+  }
+
+  if (highAlert || recoveryRisk) {
+    return {
+      riskFlag: "Recovery watch",
+      riskMessage: "Recovery markers are low or soreness is high. Consider an easier day or a coach check-in.",
+      riskScore: 125,
+    };
+  }
+
+  if (highStress) {
+    return {
+      riskFlag: "Load watch",
+      riskMessage: "Training stress is elevated in this view. Confirm the next workout fits the current load.",
+      riskScore: 110,
+    };
+  }
+
+  if (signal.alert_count > 0) {
+    return {
+      riskFlag: "Open alert",
+      riskMessage: "There is an open coach alert for this runner. Review it before clearing the week.",
+      riskScore: 100,
+    };
+  }
+
+  return { riskFlag: null, riskMessage: null, riskScore: 0 };
+}
+
 export default function CoachAnalyticsWorkbench({
   coachName,
   schoolName,
@@ -143,6 +207,7 @@ export default function CoachAnalyticsWorkbench({
   memberships,
   activities,
   preferredDistanceUnit,
+  riskSignals,
 }: {
   coachName: string;
   schoolName: string;
@@ -151,6 +216,7 @@ export default function CoachAnalyticsWorkbench({
   memberships: Membership[];
   activities: Activity[];
   preferredDistanceUnit?: string;
+  riskSignals?: RunnerRiskSignal[];
 }) {
   const [windowDays, setWindowDays] = useState(30);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
@@ -158,6 +224,10 @@ export default function CoachAnalyticsWorkbench({
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const displayUnit = normalizeDistanceUnit(preferredDistanceUnit);
   const unitLabel = distanceUnitLabel(displayUnit);
+  const riskByRunner = useMemo(
+    () => new Map((riskSignals || []).map((signal) => [signal.runner_id, signal])),
+    [riskSignals]
+  );
 
   const runnerGroups = useMemo(() => {
     const groupsById = new Map(groups.map((group) => [group.id, group]));
@@ -224,6 +294,7 @@ export default function CoachAnalyticsWorkbench({
         else if (loadChange > 35) flag = "Volume spike";
         else if (loadChange < -35) flag = "Volume drop";
         else if (paces.length >= 3 && average(paces.slice(0, 3)) < average(paces) * 0.96) flag = "Pace improving";
+        const risk = riskFromSignal(riskByRunner.get(runner.id));
 
         return {
           id: runner.id,
@@ -238,10 +309,13 @@ export default function CoachAnalyticsWorkbench({
           consistency,
           verifiedRate,
           flag,
+          riskFlag: risk.riskFlag,
+          riskMessage: risk.riskMessage,
+          riskScore: risk.riskScore,
         };
       })
       .sort((a, b) => b.miles - a.miles);
-  }, [displayUnit, filteredActivities, runnerGroups, runners, selectedIds]);
+  }, [displayUnit, filteredActivities, riskByRunner, runnerGroups, runners, selectedIds]);
 
   const totals = useMemo(() => {
     const miles = filteredActivities.reduce((sum, activity) => sum + (activity.distance_miles || 0), 0);
@@ -481,8 +555,8 @@ export default function CoachAnalyticsWorkbench({
                     <p className="text-lg font-black text-slate-950">{row.name}</p>
                     <p className="mt-1 text-sm font-semibold text-slate-600">{actionMessage(row, unitLabel)}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-black ${attentionClass(row.flag)}`}>
-                    {row.flag}
+                  <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-black ${attentionClass(row.riskFlag || row.flag)}`}>
+                    {row.riskFlag || row.flag}
                   </span>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
@@ -633,8 +707,8 @@ export default function CoachAnalyticsWorkbench({
                   </td>
                   <td className="px-4 py-3 text-slate-300">{Math.round(row.consistency * 100)}%</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full border px-3 py-1 text-xs font-bold ${attentionClass(row.flag)}`}>
-                      {row.flag}
+                    <span className={`rounded-full border px-3 py-1 text-xs font-bold ${attentionClass(row.riskFlag || row.flag)}`}>
+                      {row.riskFlag || row.flag}
                     </span>
                   </td>
                 </tr>

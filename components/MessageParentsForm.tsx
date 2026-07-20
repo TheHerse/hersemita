@@ -5,10 +5,11 @@ import { FormEvent, useMemo, useState } from "react";
 
 type RunnerOption = {
   id: string;
-  first_name: string;
-  last_name: string;
-  grade: number;
+  first_name: string | null;
+  last_name: string | null;
+  grade: number | null;
   parent_phone: string | null;
+  recipient_count: number;
 };
 
 type MessageParentsFormProps = {
@@ -25,11 +26,14 @@ export default function MessageParentsForm({
   const defaultSelectedIds = useMemo(() => runnersWithPhone.map((runner) => runner.id), [runnersWithPhone]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [message, setMessage] = useState("");
 
   const selectedSet = new Set(selectedIds);
   const hasRecipients = runnersWithPhone.length > 0;
   const allSelected = hasRecipients && selectedIds.length === runnersWithPhone.length;
   const selectedRunners = runnersWithPhone.filter((runner) => selectedSet.has(runner.id));
+  const disallowedContent = /(https?:\/\/|www\.|[a-z0-9.-]+\.[a-z]{2,}(?:\/|\b))/i.test(message) ||
+    /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/.test(message);
 
   function toggleAll() {
     setIsConfirming(false);
@@ -44,6 +48,11 @@ export default function MessageParentsForm({
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (disallowedContent) {
+      event.preventDefault();
+      setIsConfirming(false);
+      return;
+    }
     if (!isConfirming) {
       event.preventDefault();
       setIsConfirming(true);
@@ -107,24 +116,26 @@ export default function MessageParentsForm({
                 <span className="font-medium text-slate-900">
                   {runner.last_name}, {runner.first_name}
                 </span>
-                <span className="ml-2 text-sm text-slate-500">Grade {runner.grade}</span>
+                <span className="ml-2 text-sm text-slate-500">
+                  Grade {runner.grade || "--"} · {runner.recipient_count} recipient{runner.recipient_count === 1 ? "" : "s"}
+                </span>
               </label>
             </div>
           ))}
 
           {!hasRecipients && (
             <div className="px-4 py-5 text-sm text-slate-600">
-              No runners have parent phone numbers yet.
+              No runners have parent or guardian phone numbers yet.
             </div>
           )}
 
           {runnersWithoutPhone.length > 0 && (
             <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="mb-2 text-xs font-semibold text-slate-500">No parent phone on file:</p>
+              <p className="mb-2 text-xs font-semibold text-slate-500">No parent or guardian phone on file:</p>
               {runnersWithoutPhone.map((runner) => (
                 <div key={runner.id} className="flex items-center gap-2 py-1 text-sm text-slate-400">
                   <input type="checkbox" disabled className="h-4 w-4 rounded opacity-50" />
-                  {runner.last_name}, {runner.first_name} (Grade {runner.grade})
+                  {runner.last_name}, {runner.first_name} (Grade {runner.grade || "--"})
                 </div>
               ))}
             </div>
@@ -139,17 +150,23 @@ export default function MessageParentsForm({
           required
           maxLength={320}
           placeholder="Practice moved to 4pm today due to weather..."
-          onChange={() => setIsConfirming(false)}
+          value={message}
+          onChange={(event) => {
+            setMessage(event.target.value);
+            setIsConfirming(false);
+          }}
           className="h-32 w-full resize-none rounded-lg border-2 border-slate-200 p-4 text-slate-900 transition-colors focus:border-[#00a7ff] focus:outline-none"
         />
-        <p className="mt-1 text-xs text-slate-500">320 character limit for SMS</p>
+        <p className={`mt-1 text-xs font-semibold ${disallowedContent ? "text-red-600" : "text-slate-500"}`}>
+          320 character limit. Do not include links or phone numbers in SMS messages.
+        </p>
       </div>
 
       {isConfirming && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-black">Confirm before sending</p>
           <p className="mt-1">
-            This will send to {selectedIds.length} selected parent phone number{selectedIds.length === 1 ? "" : "s"}.
+            This will send to {selectedRunners.reduce((sum, runner) => sum + runner.recipient_count, 0)} parent or guardian phone number{selectedRunners.reduce((sum, runner) => sum + runner.recipient_count, 0) === 1 ? "" : "s"}.
           </p>
           <div className="mt-3 max-h-28 overflow-y-auto rounded-lg border border-amber-200 bg-white/70 p-2">
             {selectedRunners.map((runner) => (

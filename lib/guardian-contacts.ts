@@ -1,5 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 type SupabaseLikeClient = {
-  from: (table: string) => any;
+  from: SupabaseClient["from"];
 };
 
 export function cleanGuardianPhone(value: string | null | undefined) {

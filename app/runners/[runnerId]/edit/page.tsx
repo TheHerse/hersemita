@@ -8,7 +8,7 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { appBaseUrl } from "@/lib/app-url";
 import { logAuditEvent } from "@/lib/audit-log";
 import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
-import { linkGuardianToRunner, syncPrimaryRunnerGuardian, upsertGuardianContact } from "@/lib/guardian-contacts";
+import { linkGuardianToRunner, upsertGuardianContact } from "@/lib/guardian-contacts";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
   ensureDefaultRunnerGroups,
@@ -84,7 +84,6 @@ async function updateRunner(runnerId: string, formData: FormData) {
   const grade = parseInt(formData.get("grade") as string);
   const division = formData.get("division") as RunnerDivision;
   const parentPhone = (formData.get("parentPhone") as string)?.trim();
-  const parentEmail = (formData.get("parentEmail") as string)?.trim();
   const customGroupIds = formData.getAll("groups") as string[];
 
   const { data: runner } = await supabase
@@ -120,14 +119,6 @@ async function updateRunner(runnerId: string, formData: FormData) {
     grade,
     division,
     client: supabase,
-  });
-
-  await syncPrimaryRunnerGuardian({
-    client: supabase,
-    teamId,
-    runnerId: runner.id,
-    phone: parentPhone,
-    email: parentEmail,
   });
 
   const { data: allowedCustomGroups } = customGroupIds.length
@@ -453,7 +444,7 @@ export default async function EditRunnerPage({
 
   await ensureDefaultRunnerGroups(coachId, supabase, teamId);
 
-  const [{ data: runner }, { data: groups }, { data: primaryGuardianLinks }, { data: guardianLinks }] = await Promise.all([
+  const [{ data: runner }, { data: groups }, { data: guardianLinks }] = await Promise.all([
     supabase
       .from("runners")
       .select("id, first_name, last_name, grade, parent_phone, access_code, username")
@@ -465,12 +456,6 @@ export default async function EditRunnerPage({
       .select("id, name, color")
       .eq("team_id", teamId)
       .order("name", { ascending: true }),
-    supabase
-      .from("runner_guardians")
-      .select("guardian_contacts(id, email, clerk_id, portal_enabled)")
-      .eq("runner_id", runnerId)
-      .eq("relationship", "parent_guardian")
-      .eq("is_primary", true),
     supabase
       .from("runner_guardians")
       .select("guardian_id, relationship, is_primary, guardian_contacts(id, first_name, last_name, phone, email, clerk_id, portal_enabled)")
@@ -492,9 +477,6 @@ export default async function EditRunnerPage({
     : { data: [] };
 
   const assigned = new Set(memberships?.map((membership) => membership.group_id) || []);
-  const primaryGuardian = primaryGuardianLinks?.[0]?.guardian_contacts as PrimaryGuardian | PrimaryGuardian[] | null | undefined;
-  const primaryGuardianEmail = Array.isArray(primaryGuardian) ? primaryGuardian[0]?.email : primaryGuardian?.email;
-  const primaryGuardianClerkId = Array.isArray(primaryGuardian) ? primaryGuardian[0]?.clerk_id : primaryGuardian?.clerk_id;
   const safeGuardianLinks = ((guardianLinks || []) as GuardianLink[]).map((link) => ({
     ...link,
     guardian_contacts: Array.isArray(link.guardian_contacts) ? link.guardian_contacts[0] || null : link.guardian_contacts,
@@ -584,12 +566,6 @@ export default async function EditRunnerPage({
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">Parent Phone Number</label>
             <PhoneNumberInput name="parentPhone" placeholder="5551234567" defaultValue={runner.parent_phone} />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Parent Portal Email</label>
-            <input name="parentEmail" type="email" placeholder="parent@example.com" defaultValue={primaryGuardianEmail || ""} className="w-full rounded-lg border-2 border-slate-200 px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none" />
-            <p className="mt-1 text-xs text-slate-500">Parents use this email to access their linked runner in the parent portal.</p>
           </div>
 
           {customGroups.length > 0 && (

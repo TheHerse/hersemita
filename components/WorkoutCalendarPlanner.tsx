@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Runner = {
   id: string;
@@ -258,6 +258,11 @@ export default function WorkoutCalendarPlanner({
   const [calendarLoaded, setCalendarLoaded] = useState(false);
   const [calendarRevision, setCalendarRevision] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState("Loading calendar...");
+  const calendarRevisionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    calendarRevisionRef.current = calendarRevision;
+  }, [calendarRevision]);
 
   useEffect(() => {
     let active = true;
@@ -338,7 +343,7 @@ export default function WorkoutCalendarPlanner({
         const response = await fetch("/api/workout-calendar", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ templates, assignments, revision: calendarRevision }),
+          body: JSON.stringify({ templates, assignments, revision: calendarRevisionRef.current }),
         });
         const result = await response.json().catch(() => null) as { error?: string; revision?: string } | null;
 
@@ -396,11 +401,11 @@ export default function WorkoutCalendarPlanner({
 
   const teamRunnerIds = useMemo(() => runners.map((runner) => runner.id), [runners]);
 
-  function resolveAssignmentRunnerIds(assignment: CalendarAssignment) {
+  const resolveAssignmentRunnerIds = useCallback((assignment: CalendarAssignment) => {
     if (assignment.targetType === "team") return teamRunnerIds;
     if (assignment.targetType === "group") return groupRunnerIds.get(assignment.targetId) || [];
     return assignment.targetId ? [assignment.targetId] : [];
-  }
+  }, [groupRunnerIds, teamRunnerIds]);
 
   const monthStats = useMemo(() => {
     const viewedMonthKey = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}`;
@@ -447,7 +452,7 @@ export default function WorkoutCalendarPlanner({
       missedUploads,
       upcomingSlots,
     };
-  }, [activities, calendarMonth, currentMonthAssignments, groupRunnerIds, teamRunnerIds, templatesById]);
+  }, [activities, calendarMonth, currentMonthAssignments, resolveAssignmentRunnerIds, templatesById]);
 
   const selectedDayAssignments = assignments.filter((assignment) => assignment.date === selectedDate);
   const selectedDateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString("en-US", {

@@ -15,6 +15,7 @@ type LogParentMessageInput = {
   mock: boolean;
   errorMessage?: string | null;
   runnerCount: number;
+  recipientCount?: number;
   recipients: MessageRecipient[];
 };
 
@@ -38,7 +39,7 @@ export async function logParentMessage(input: LogParentMessageInput) {
       provider: "twilio",
       mock: input.mock,
       runner_count: input.runnerCount,
-      recipient_count: input.recipients.length,
+      recipient_count: input.recipientCount ?? input.recipients.length,
       error_message: input.errorMessage || null,
     })
     .select("id")

@@ -9,6 +9,56 @@ import { logAuditEvent } from "@/lib/audit-log";
 import { logParentMessage } from "@/lib/parent-message-log";
 import { getCurrentTeamContext } from "@/lib/team-context";
 
+type RunnerMessageRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  grade: number | null;
+  parent_phone: string | null;
+};
+
+type GuardianPhoneLink = {
+  runner_id: string | null;
+  guardian_contacts:
+    | {
+        phone: string | null;
+      }
+    | {
+        phone: string | null;
+      }[]
+    | null;
+};
+
+function phoneKey(phone: string | null | undefined) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return digits;
+  return digits.length >= 7 ? digits : null;
+}
+
+function guardianPhone(link: GuardianPhoneLink) {
+  const contact = Array.isArray(link.guardian_contacts) ? link.guardian_contacts[0] : link.guardian_contacts;
+  return contact?.phone || null;
+}
+
+function phonesForRunner(runner: RunnerMessageRow, guardianLinks: GuardianPhoneLink[]) {
+  const phones = [runner.parent_phone, ...guardianLinks.filter((link) => link.runner_id === runner.id).map(guardianPhone)];
+  const seen = new Set<string>();
+  return phones.filter((phone): phone is string => {
+    const key = phoneKey(phone);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function hasDisallowedSmsContent(message: string) {
+  const hasLink = /(https?:\/\/|www\.|[a-z0-9.-]+\.[a-z]{2,}(?:\/|\b))/i.test(message);
+  const hasPhoneNumber = /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/.test(message);
+  return hasLink || hasPhoneNumber;
+}
+
 async function sendMessage(formData: FormData) {
   "use server";
   
@@ -32,6 +82,10 @@ async function sendMessage(formData: FormData) {
   const messageType = formData.get("type") as string;
   const selectedRunners = formData.getAll("runners") as string[];
 
+  if (hasDisallowedSmsContent(message)) {
+    redirect("/runners/message?status=invalid_content");
+  }
+
   if (selectedRunners.length === 0) {
     redirect("/runners/message?status=none");
   }
@@ -40,10 +94,31 @@ async function sendMessage(formData: FormData) {
     .from("runners")
     .select("id, first_name, last_name, parent_phone")
     .eq("team_id", teamId)
-    .in("id", selectedRunners)
-    .not("parent_phone", "is", null);
-  
-  const phones = runners?.map(r => r.parent_phone!).filter(Boolean) || [];
+    .in("id", selectedRunners);
+
+  const safeRunners = (runners || []) as RunnerMessageRow[];
+  const runnerIds = safeRunners.map((runner) => runner.id);
+  const { data: guardianLinks } = runnerIds.length
+    ? await supabase
+        .from("runner_guardians")
+        .select("runner_id, guardian_contacts(phone)")
+        .eq("relationship", "parent_guardian")
+        .in("runner_id", runnerIds)
+    : { data: [] };
+  const safeGuardianLinks = (guardianLinks || []) as GuardianPhoneLink[];
+  const recipients = safeRunners.flatMap((runner) =>
+    phonesForRunner(runner, safeGuardianLinks).map((phone) => ({
+      runnerId: runner.id,
+      runnerName: `${runner.first_name || ""} ${runner.last_name || ""}`.trim(),
+      parentPhone: phone,
+    }))
+  );
+  const phoneMap = new Map<string, string>();
+  recipients.forEach((recipient) => {
+    const key = phoneKey(recipient.parentPhone);
+    if (key && !phoneMap.has(key)) phoneMap.set(key, recipient.parentPhone || "");
+  });
+  const phones = Array.from(phoneMap.values()).filter(Boolean);
 
   if (phones.length === 0) {
     redirect("/runners/message?status=none");
@@ -64,11 +139,8 @@ async function sendMessage(formData: FormData) {
     mock: Boolean(result.mock),
     errorMessage: result.success ? null : result.error || null,
     runnerCount: selectedRunners.length,
-    recipients: (runners || []).map((runner) => ({
-      runnerId: runner.id,
-      runnerName: `${runner.first_name} ${runner.last_name}`.trim(),
-      parentPhone: runner.parent_phone,
-    })),
+    recipientCount: phones.length,
+    recipients,
   });
 
   await logAuditEvent({
@@ -115,9 +187,24 @@ export default async function MessageParentsPage({
         .order("last_name", { ascending: true })
     : { data: [] };
 
-  const runnersWithPhone = runners?.filter(r => r.parent_phone) || [];
-  const runnersWithoutPhone = runners?.filter(r => !r.parent_phone) || [];
-  const runnerCount = runners?.length || 0;
+  const safeRunners = (runners || []) as RunnerMessageRow[];
+  const runnerIds = safeRunners.map((runner) => runner.id);
+  const { data: guardianLinks } = runnerIds.length
+    ? await supabase
+        .from("runner_guardians")
+        .select("runner_id, guardian_contacts(phone)")
+        .eq("relationship", "parent_guardian")
+        .in("runner_id", runnerIds)
+    : { data: [] };
+  const safeGuardianLinks = (guardianLinks || []) as GuardianPhoneLink[];
+  const runnersForMessaging = safeRunners.map((runner) => ({
+    ...runner,
+    recipient_count: phonesForRunner(runner, safeGuardianLinks).length,
+  }));
+  const runnersWithPhone = runnersForMessaging.filter((runner) => runner.recipient_count > 0);
+  const runnersWithoutPhone = runnersForMessaging.filter((runner) => runner.recipient_count === 0);
+  const runnerCount = safeRunners.length;
+  const recipientCount = runnersWithPhone.reduce((sum, runner) => sum + runner.recipient_count, 0);
 
   return (
     <div className="min-h-screen hersemita-page-bg">
@@ -135,7 +222,7 @@ export default async function MessageParentsPage({
               <h1 className="text-2xl font-bold text-slate-900">Message Parents</h1>
             </div>
             <p className="text-slate-600 mb-6 sm:ml-11">
-              {runnersWithPhone.length} of {runnerCount} runners have parent phone numbers
+              {runnersWithPhone.length} of {runnerCount} runners have parent contacts ({recipientCount} SMS recipient{recipientCount === 1 ? "" : "s"})
             </p>
             <Link
               href="/runners/message/history"
@@ -156,6 +243,7 @@ export default async function MessageParentsPage({
                 {params.status === "mock" && `Twilio is not fully configured yet. Hersemita prepared ${params.count || 0} message${params.count === "1" ? "" : "s"} but did not send live SMS.`}
                 {params.status === "error" && "Message sending failed. Check Twilio credentials, verification, and phone-number formatting."}
                 {params.status === "none" && "Choose at least one runner with a parent phone number before sending."}
+                {params.status === "invalid_content" && "Messages cannot include links or phone numbers under the approved SMS campaign."}
               </div>
             )}
 

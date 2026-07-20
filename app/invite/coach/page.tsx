@@ -35,6 +35,10 @@ function verifiedEmailsFromClerkUser(user: Awaited<ReturnType<typeof currentUser
     .filter(Boolean);
 }
 
+function isExpired(expiresAt: string) {
+  return new Date(expiresAt).getTime() <= new Date().getTime();
+}
+
 function ErrorPanel({ title, message }: { title: string; message: string }) {
   return (
     <div className="min-h-screen hersemita-page-bg px-4 py-12 text-white sm:px-6 lg:px-8">
@@ -96,7 +100,7 @@ export default async function CoachInvitePage({
     return <ErrorPanel title="Invitation already accepted" message="This invitation has already been used. Sign in with the accepted coach account or ask the head coach to send a new invite." />;
   }
 
-  if (new Date(teamInvite.expires_at).getTime() <= Date.now()) {
+  if (isExpired(teamInvite.expires_at)) {
     return <ErrorPanel title="Invitation expired" message="Assistant coach invitations expire after 7 days. Ask the head coach to resend it." />;
   }
 

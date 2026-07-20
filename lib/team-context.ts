@@ -20,6 +20,28 @@ export type CurrentTeamContext = {
   role: TeamCoachRole;
 };
 
+type TeamMembershipRow = {
+  team_id: string;
+  coach_id: string;
+  role: TeamCoachRole;
+  status: string;
+  created_at: string;
+  coaches:
+    | {
+        id: string;
+        name: string | null;
+        email: string | null;
+        clerk_id: string | null;
+      }
+    | {
+        id: string;
+        name: string | null;
+        email: string | null;
+        clerk_id: string | null;
+      }[]
+    | null;
+};
+
 type MembershipRecord = {
   role: TeamCoachRole;
   teams:
@@ -70,7 +92,7 @@ export async function getTeamMembers(teamId: string) {
     .eq("team_id", teamId)
     .order("created_at", { ascending: true });
 
-  return (data || []).map((membership: any) => ({
+  return ((data || []) as TeamMembershipRow[]).map((membership) => ({
     team_id: membership.team_id as string,
     coach_id: membership.coach_id as string,
     role: membership.role as TeamCoachRole,
