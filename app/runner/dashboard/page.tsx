@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import RunnerPortalHeader from "@/components/RunnerPortalHeader";
 import { distanceUnitLabel, normalizeDistanceUnit, type DistanceUnit } from "@/lib/distance-units";
+import { displayActivitySource, displayTrainingNote } from "@/lib/display-text";
 
 type Runner = {
   id: string;
@@ -147,7 +148,7 @@ export default function RunnerDashboardPage() {
                         <div>
                           <p className="font-bold text-slate-900">{formatDate(activity.startTime)}</p>
                           <p className="mt-1 text-sm text-slate-500">
-                            {activity.detectedApp || "Manual upload"} | {activity.verified ? "Verified" : "Waiting for coach review"}
+                            {displayActivitySource(activity.detectedApp)} | {activity.verified ? "Verified" : "Waiting for coach review"}
                           </p>
                         </div>
                         <dl className="grid grid-cols-3 gap-3 text-center text-sm sm:min-w-[320px]">
@@ -165,7 +166,7 @@ export default function RunnerDashboardPage() {
                           </div>
                         </dl>
                       </div>
-                      {activity.notes && <p className="mt-3 text-sm text-slate-600">{activity.notes}</p>}
+                      {activity.notes && <p className="mt-3 text-sm text-slate-600">{displayTrainingNote(activity.notes)}</p>}
                     </article>
                   ))}
                 </div>

@@ -17,6 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { displayActivitySource } from "@/lib/display-text";
 import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
 
 type Runner = {
@@ -366,7 +367,7 @@ export default function CoachAnalyticsWorkbench({
   const sourceMix = useMemo(() => {
     const byApp = new Map<string, number>();
     filteredActivities.forEach((activity) => {
-      const app = activity.detected_app || "Manual";
+      const app = displayActivitySource(activity.detected_app);
       byApp.set(app, (byApp.get(app) || 0) + 1);
     });
     return [...byApp.entries()].map(([name, value]) => ({ name, value }));
@@ -376,7 +377,10 @@ export default function CoachAnalyticsWorkbench({
     selectedRunnerIds.length || selectedGroupIds.length
       ? `${selectedIds.size} runner${selectedIds.size === 1 ? "" : "s"} selected`
       : "Entire roster";
-  const attentionCount = athleteRows.filter((row) => !["On track", "Pace improving"].includes(row.flag)).length;
+  const attentionCount = athleteRows.filter((row) => {
+    const flag = row.riskFlag || row.flag;
+    return !["On track", "Pace improving"].includes(flag);
+  }).length;
   const actionQueue = [...athleteRows]
     .map((row) => ({ row, score: priorityScore(row) }))
     .filter((item) => item.score > 0)

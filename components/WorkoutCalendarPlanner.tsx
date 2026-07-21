@@ -564,7 +564,11 @@ export default function WorkoutCalendarPlanner({
             <HeaderStat label="Workouts" value={currentMonthAssignments.length.toString()} detail={`${monthStats.upcomingSlots} upcoming slots`} />
             <HeaderStat label="Planned" value={formatMiles(monthStats.plannedMiles)} detail={`${monthStats.plannedRunnerDays} runner-days`} />
             <HeaderStat label="Logged" value={formatMiles(monthStats.completedMiles)} detail="verified miles" />
-            <HeaderStat label="Completion" value={`${Math.round(monthStats.completionRate * 100)}%`} detail={`${monthStats.completedRunnerDays}/${monthStats.dueRunnerDays} due`} />
+            <HeaderStat
+              label="Completion"
+              value={monthStats.dueRunnerDays > 0 ? `${Math.round(monthStats.completionRate * 100)}%` : "--"}
+              detail={monthStats.dueRunnerDays > 0 ? `${monthStats.completedRunnerDays}/${monthStats.dueRunnerDays} due` : "0 due"}
+            />
             <HeaderStat label="Missing" value={monthStats.missedUploads.toString()} detail="past due uploads" intent={monthStats.missedUploads > 0 ? "attention" : "neutral"} />
           </div>
         </div>

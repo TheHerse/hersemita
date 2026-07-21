@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import ParentHeader from "@/components/ParentHeader";
 import { getParentPortalContext } from "@/lib/parent-context";
+import { displayTrainingNote } from "@/lib/display-text";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type Activity = {
@@ -194,7 +195,7 @@ export default async function ParentDashboardPage() {
 
                 {safeActivities.length === 0 ? (
                   <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                    No verified activities are available yet.
+                    Linked runners will appear here after a coach verifies their first uploaded activity.
                   </div>
                 ) : (
                   <div className="mt-4 space-y-3">
@@ -248,7 +249,9 @@ export default async function ParentDashboardPage() {
                                 Grade {runner.grade ?? "--"} / {team?.school_name || team?.name || "Team"}
                               </p>
                             </div>
-                            <span className="rounded-full bg-[#00a7ff]/10 px-3 py-1 text-xs font-bold text-[#007ab8]">Open</span>
+                            <span className="rounded-full bg-[#00a7ff]/10 px-3 py-1 text-xs font-bold text-[#007ab8]">
+                              {runnerActivities.length > 0 ? "Open" : "Waiting"}
+                            </span>
                           </div>
                           <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
                             <div>
@@ -282,7 +285,7 @@ export default async function ParentDashboardPage() {
                         return (
                           <div key={alert.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                             <p className="text-xs font-bold uppercase tracking-wide text-amber-700">{alert.severity || "Note"}</p>
-                            <p className="mt-2 text-sm font-semibold text-slate-900">{alert.message || "Coach alert"}</p>
+                            <p className="mt-2 text-sm font-semibold text-slate-900">{displayTrainingNote(alert.message, "Coach alert")}</p>
                             <p className="mt-2 text-xs text-slate-500">
                               {runner ? runnerName(runner) : "Team"} / {formatDate(alert.created_at)}
                             </p>

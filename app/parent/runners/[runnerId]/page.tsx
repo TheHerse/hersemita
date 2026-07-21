@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import ParentHeader from "@/components/ParentHeader";
 import { getParentPortalContext } from "@/lib/parent-context";
+import { displayTrainingNote } from "@/lib/display-text";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type Activity = {
@@ -247,7 +248,7 @@ export default async function ParentRunnerDetailPage({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-bold text-slate-900">{formatDate(activity.start_time)}</p>
-                          <p className="mt-1 text-sm text-slate-500">{activity.notes || "Verified by coach"}</p>
+                          <p className="mt-1 text-sm text-slate-500">{displayTrainingNote(activity.notes, "Verified by coach")}</p>
                         </div>
                         <p className="font-bold text-[#00a7ff]">{formatDistance(Number(activity.distance_miles || 0), distanceUnit)}</p>
                       </div>
@@ -288,7 +289,7 @@ export default async function ParentRunnerDetailPage({
                         <td className="px-3 py-3 text-slate-700">{formatPace(activity.pace_per_mile, distanceUnit)}</td>
                         <td className={`px-3 py-3 font-semibold ${effortClass(activity.training_load)}`}>{effortLabel(activity.training_load)}</td>
                         <td className="px-3 py-3 text-slate-700">{activity.rpe ?? "--"}</td>
-                        <td className="max-w-[260px] px-3 py-3 text-slate-500">{activity.notes || "--"}</td>
+                        <td className="max-w-[260px] px-3 py-3 text-slate-500">{displayTrainingNote(activity.notes, "--")}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -308,7 +309,7 @@ export default async function ParentRunnerDetailPage({
                   {safeAlerts.map((alert) => (
                     <div key={alert.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <p className="text-xs font-bold uppercase tracking-wide text-amber-700">{alert.severity || "Note"}</p>
-                      <p className="mt-2 text-sm font-semibold text-slate-900">{alert.message || "Coach alert"}</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">{displayTrainingNote(alert.message, "Coach alert")}</p>
                       <p className="mt-2 text-xs text-slate-500">{formatDate(alert.created_at)}</p>
                     </div>
                   ))}

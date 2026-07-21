@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import RunnerPortalHeader from "@/components/RunnerPortalHeader";
+import { displayTrainingNote } from "@/lib/display-text";
 
 type Runner = {
   id: string;
@@ -278,7 +279,7 @@ export default function RunnerRecoveryPage() {
                       <Stat label="Score" value={log.sleep_score == null ? "--" : String(log.sleep_score)} />
                       <Stat label="Sore" value={log.soreness == null ? "--" : String(log.soreness)} />
                     </dl>
-                    {log.notes && <p className="mt-3 text-sm text-slate-600">{log.notes}</p>}
+                    {log.notes && <p className="mt-3 text-sm text-slate-600">{displayTrainingNote(log.notes)}</p>}
                   </article>
                 ))}
               </div>

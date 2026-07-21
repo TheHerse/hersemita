@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMiles } from "@/lib/distance-units";
+import { displayActivitySource } from "@/lib/display-text";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getCurrentTeamContext } from "@/lib/team-context";
 
@@ -163,7 +164,7 @@ export async function GET(request: Request) {
     previousRunnerId = runnerId;
     const distance = milesToDistance(Number(activity.distance_miles || 0), preferredDistanceUnit);
     const pace = paceFromMiles(Number(activity.pace_per_mile || 0), preferredDistanceUnit);
-    const source = activity.file_type || activity.detected_app || activity.uploaded_by || "manual";
+    const source = displayActivitySource(activity.file_type || activity.detected_app || activity.uploaded_by || "manual");
 
     return [
       isFirstRunnerRow ? `${runner?.first_name || ""} ${runner?.last_name || ""}`.trim() : "",
