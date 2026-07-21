@@ -92,6 +92,36 @@ function formatHrv(value: number | string | null) {
   return Number.isFinite(numberValue) ? `${Math.round(numberValue)} ms` : "--";
 }
 
+function effortLabel(load: number | null) {
+  if (load == null) return "Not logged";
+  if (load >= 300) return "Very hard";
+  if (load >= 180) return "Hard";
+  if (load >= 90) return "Steady";
+  return "Easy";
+}
+
+function effortClass(load: number | null) {
+  if (load == null) return "text-slate-500";
+  if (load >= 300) return "text-red-600";
+  if (load >= 180) return "text-orange-600";
+  if (load >= 90) return "text-[#007ab8]";
+  return "text-[#0f8f45]";
+}
+
+function recoveryLabel(log: RecoveryLog) {
+  if (log.illness) return "Illness noted";
+  if (log.hrv_status === "poor" || log.hrv_status === "low" || Number(log.soreness || 0) >= 8) return "Needs extra recovery";
+  if (log.hrv_status === "unbalanced" || Number(log.soreness || 0) >= 6) return "Watch recovery";
+  return "Looks steady";
+}
+
+function recoveryClass(log: RecoveryLog) {
+  const label = recoveryLabel(log);
+  if (label === "Needs extra recovery" || label === "Illness noted") return "text-red-600";
+  if (label === "Watch recovery") return "text-orange-600";
+  return "text-[#0f8f45]";
+}
+
 export default async function ParentRunnerDetailPage({
   params,
 }: {
@@ -227,8 +257,8 @@ export default async function ParentRunnerDetailPage({
                           <p className="text-xs text-slate-500">Pace</p>
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900">{activity.training_load ?? "--"}</p>
-                          <p className="text-xs text-slate-500">Load</p>
+                          <p className={`font-bold ${effortClass(activity.training_load)}`}>{effortLabel(activity.training_load)}</p>
+                          <p className="text-xs text-slate-500">Effort</p>
                         </div>
                         <div>
                           <p className="font-bold text-slate-900">{activity.rpe ?? "--"}</p>
@@ -245,7 +275,7 @@ export default async function ParentRunnerDetailPage({
                       <th className="px-3 py-3">Date</th>
                       <th className="px-3 py-3">Distance</th>
                       <th className="px-3 py-3">Pace</th>
-                      <th className="px-3 py-3">Load</th>
+                      <th className="px-3 py-3">Effort</th>
                       <th className="px-3 py-3">RPE</th>
                       <th className="px-3 py-3">Notes</th>
                     </tr>
@@ -256,7 +286,7 @@ export default async function ParentRunnerDetailPage({
                         <td className="px-3 py-3 font-semibold text-slate-900">{formatDate(activity.start_time)}</td>
                         <td className="px-3 py-3 font-bold text-[#00a7ff]">{formatDistance(Number(activity.distance_miles || 0), distanceUnit)}</td>
                         <td className="px-3 py-3 text-slate-700">{formatPace(activity.pace_per_mile, distanceUnit)}</td>
-                        <td className="px-3 py-3 text-slate-700">{activity.training_load ?? "--"}</td>
+                        <td className={`px-3 py-3 font-semibold ${effortClass(activity.training_load)}`}>{effortLabel(activity.training_load)}</td>
                         <td className="px-3 py-3 text-slate-700">{activity.rpe ?? "--"}</td>
                         <td className="max-w-[260px] px-3 py-3 text-slate-500">{activity.notes || "--"}</td>
                       </tr>
@@ -294,7 +324,10 @@ export default async function ParentRunnerDetailPage({
                 <div className="mt-4 space-y-3">
                   {safeRecoveryLogs.map((log) => (
                     <div key={log.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="font-bold text-slate-900">{formatDate(log.log_date)}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-bold text-slate-900">{formatDate(log.log_date)}</p>
+                        <p className={`text-xs font-bold uppercase tracking-wide ${recoveryClass(log)}`}>{recoveryLabel(log)}</p>
+                      </div>
                       <p className="mt-2 text-sm text-slate-600">
                         Sleep {formatSleep(log.sleep_duration_min)} / Score {log.sleep_score ?? "--"} / Soreness {log.soreness ?? "--"}
                       </p>

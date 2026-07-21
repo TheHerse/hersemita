@@ -262,7 +262,7 @@ export default function UploadPage() {
             <div onDrop={onDrop} onDragOver={e => e.preventDefault()} className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-[#00a7ff] hover:bg-[#00a7ff]/5 transition-colors cursor-pointer mb-6">
               <input type="file" accept="image/*,.gpx" multiple onChange={onFileSelect} className="hidden" id="upload" />
               <label htmlFor="upload" className="cursor-pointer block">
-                <div className="text-4xl mb-2">📸</div>
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#00a7ff]/10 text-sm font-black uppercase text-[#007ab8]">File</div>
                 <p className="font-semibold text-slate-700">Drop screenshots here or click to browse</p>
                 <p className="text-sm text-slate-500">Supports: Garmin, Strava, Apple Watch</p>
               </label>
@@ -274,8 +274,9 @@ export default function UploadPage() {
                 <div className="grid grid-cols-3 gap-3">
                   {screenshots.map((f, i) => (
                     <div key={i} className="relative aspect-square rounded-lg overflow-hidden border">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Browser-selected preview files use object URLs, so next/image is not useful here. */}
                       <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" alt="" />
-                      <button onClick={() => removeScreenshot(i)} className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-sm">×</button>
+                      <button onClick={() => removeScreenshot(i)} className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-sm" aria-label="Remove selected file">x</button>
                     </div>
                   ))}
                 </div>
@@ -299,7 +300,7 @@ export default function UploadPage() {
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-center gap-2 mb-6">
-              <span className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center">✓</span>
+              <span className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-black">OK</span>
               <h3 className="font-semibold text-lg">Review Details Before Sending</h3>
             </div>
 
@@ -313,6 +314,7 @@ export default function UploadPage() {
               <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
                 {screenshotUrls.map((url, i) => (
                   <a key={i} href={url} target="_blank" rel="noreferrer" className="flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Signed proof URLs are dynamic thumbnails opened by the coach, so keep a plain image tag. */}
                     <img src={url} alt="" className="w-24 h-32 object-cover rounded-lg border" />
                   </a>
                 ))}

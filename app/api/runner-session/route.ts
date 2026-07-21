@@ -13,20 +13,27 @@ export async function GET() {
 
   const { data: runner } = await supabaseAdmin
     .from("runners")
-    .select("id, first_name, last_name, grade, coaches(name, school_name, preferred_distance_unit)")
+    .select("id, team_id, first_name, last_name, grade, coaches(name, school_name, preferred_distance_unit)")
     .eq("id", session.runnerId)
     .maybeSingle();
 
   const coach = runner?.coaches ? (Array.isArray(runner.coaches) ? runner.coaches[0] : runner.coaches) : null;
+  const { data: team } = runner?.team_id
+    ? await supabaseAdmin
+        .from("teams")
+        .select("name, school_name, default_distance_unit")
+        .eq("id", runner.team_id)
+        .maybeSingle()
+    : { data: null };
 
   return NextResponse.json({
     runner: {
       id: session.runnerId,
       name: runner ? `${runner.first_name} ${runner.last_name}` : session.runnerName,
       grade: runner?.grade || null,
-      schoolName: coach?.school_name || "Your school",
+      schoolName: team?.school_name || team?.name || coach?.school_name || "Your school",
       coachName: coach?.name || "Coach",
-      preferredDistanceUnit: normalizeDistanceUnit(coach?.preferred_distance_unit),
+      preferredDistanceUnit: normalizeDistanceUnit(team?.default_distance_unit || coach?.preferred_distance_unit),
     },
   });
 }

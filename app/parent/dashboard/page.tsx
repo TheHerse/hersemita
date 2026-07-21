@@ -60,6 +60,22 @@ function formatPace(seconds: number | null, unit: string) {
   return `${minutes}:${remaining}/${unit === "kilometers" ? "km" : "mi"}`;
 }
 
+function effortLabel(load: number | null) {
+  if (load == null) return "Not logged";
+  if (load >= 300) return "Very hard";
+  if (load >= 180) return "Hard";
+  if (load >= 90) return "Steady";
+  return "Easy";
+}
+
+function effortClass(load: number | null) {
+  if (load == null) return "text-slate-500";
+  if (load >= 300) return "text-red-600";
+  if (load >= 180) return "text-orange-600";
+  if (load >= 90) return "text-[#007ab8]";
+  return "text-[#0f8f45]";
+}
+
 function sumDistance(activities: Activity[]) {
   return activities.reduce((total, activity) => total + Number(activity.distance_miles || 0), 0);
 }
@@ -202,8 +218,8 @@ export default async function ParentDashboardPage() {
                                 <p className="text-xs text-slate-500">Pace</p>
                               </div>
                               <div>
-                                <p className="font-bold text-slate-900">{activity.training_load ?? "--"}</p>
-                                <p className="text-xs text-slate-500">Load</p>
+                                <p className={`font-bold ${effortClass(activity.training_load)}`}>{effortLabel(activity.training_load)}</p>
+                                <p className="text-xs text-slate-500">Effort</p>
                               </div>
                             </div>
                           </div>

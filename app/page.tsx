@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Home() {
   return (
@@ -11,9 +12,12 @@ export default function Home() {
         {/* Logo Section - Clean background */}
         <div className="flex flex-col items-center gap-4">
           <div className="w-50 h-50 rounded-2xl overflow-hidden">
-            <img 
+            <Image
               src="/logo.png" 
               alt="Hersemita" 
+              width={200}
+              height={200}
+              priority
               className="w-full h-full object-contain"
             />
           </div>

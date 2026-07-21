@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -35,7 +36,7 @@ export default function RunnerPortalHeader({
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <img src="/logo.png" alt="Hersemita" className="h-10 w-10 object-contain" />
+            <Image src="/logo.png" alt="Hersemita" width={40} height={40} className="h-10 w-10 object-contain" />
             <div className="min-w-0">
               <h1 className="brand-wordmark text-2xl font-bold">Hersemita</h1>
               <p className="truncate text-sm font-semibold text-slate-900">{runnerName}</p>

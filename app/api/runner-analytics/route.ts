@@ -25,7 +25,7 @@ export async function GET() {
 
   const { data: runner, error: runnerError } = await supabaseAdmin
     .from("runners")
-    .select("id, first_name, last_name, grade, coaches(name, school_name, preferred_distance_unit)")
+    .select("id, team_id, first_name, last_name, grade, coaches(name, school_name, preferred_distance_unit)")
     .eq("id", session.runnerId)
     .maybeSingle();
 
@@ -56,15 +56,23 @@ export async function GET() {
     .filter((activity) => new Date(activity.start_time).getTime() >= lastSevenDays)
     .reduce((sum, activity) => sum + Number(activity.distance_miles || 0), 0);
 
+  const { data: team } = runner.team_id
+    ? await supabaseAdmin
+        .from("teams")
+        .select("name, school_name, default_distance_unit")
+        .eq("id", runner.team_id)
+        .maybeSingle()
+    : { data: null };
+
   const coach = Array.isArray(runner.coaches) ? runner.coaches[0] : runner.coaches;
-  const preferredDistanceUnit = normalizeDistanceUnit(coach?.preferred_distance_unit);
+  const preferredDistanceUnit = normalizeDistanceUnit(team?.default_distance_unit || coach?.preferred_distance_unit);
 
   return NextResponse.json({
     runner: {
       id: runner.id,
       name: `${runner.first_name} ${runner.last_name}`,
       grade: runner.grade,
-      schoolName: coach?.school_name || "Your school",
+      schoolName: team?.school_name || team?.name || coach?.school_name || "Your school",
       coachName: coach?.name || "Coach",
       preferredDistanceUnit,
     },
