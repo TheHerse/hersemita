@@ -69,7 +69,7 @@ create or replace function public.submit_privacy_request(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, extensions, public
 as $$
 declare
   request_id uuid;
