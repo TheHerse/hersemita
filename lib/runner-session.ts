@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const COOKIE_NAME = "hersemita_runner_session";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const SESSION_LIFETIME_SECONDS = 60 * 60 * 12;
 
 type RunnerSession = {
   runnerId: string;
@@ -45,7 +45,7 @@ export async function setRunnerSession(
     runnerName,
     credentialVersion,
     sessionVersion,
-    exp: Date.now() + MAX_AGE_SECONDS * 1000,
+    exp: Date.now() + SESSION_LIFETIME_SECONDS * 1000,
   };
   const payload = toBase64Url(JSON.stringify(session));
   const signature = sign(payload);
@@ -55,7 +55,6 @@ export async function setRunnerSession(
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: MAX_AGE_SECONDS,
   });
 }
 

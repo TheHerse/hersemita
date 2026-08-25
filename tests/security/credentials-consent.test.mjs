@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { acceptedAdultConsentChoices, REQUIRED_ADULT_CONSENT_KEYS } from "../../lib/adult-consent.ts";
 import { acceptedParentConsentChoices, REQUIRED_PARENT_CONSENT_KEYS } from "../../lib/parent-consent.ts";
@@ -25,6 +26,17 @@ test("runner access-code vault encryption is authenticated and bound to one runn
   assert.equal(decryptRunnerAccessCode("22222222-2222-4222-8222-222222222222", encrypted), null);
   assert.equal(decryptRunnerAccessCode(runnerId, `${encrypted.slice(0, -1)}A`), null);
   assert.equal(decryptRunnerAccessCode(runnerId, code), null);
+});
+
+test("runner sessions are nonpersistent and expire within 12 hours", async () => {
+  const source = await readFile(new URL("../../lib/runner-session.ts", import.meta.url), "utf8");
+  assert.match(source, /SESSION_LIFETIME_SECONDS = 60 \* 60 \* 12/);
+  const cookieOptions = source.slice(source.indexOf("cookies()).set"), source.indexOf("export async function clearRunnerSession"));
+  assert.doesNotMatch(cookieOptions, /maxAge|expires:/);
+  assert.match(source, /session\.exp < Date\.now\(\)/);
+  assert.match(source, /runner\.portal_status !== "active"/);
+  assert.match(source, /runner\.credential_version\) !== session\.credentialVersion/);
+  assert.match(source, /runner\.session_version\) !== session\.sessionVersion/);
 });
 
 test("parent consent requires every independently named choice", () => {
