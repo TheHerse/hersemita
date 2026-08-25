@@ -3,6 +3,7 @@ import test from "node:test";
 import { acceptedAdultConsentChoices, REQUIRED_ADULT_CONSENT_KEYS } from "../../lib/adult-consent.ts";
 import { acceptedParentConsentChoices, REQUIRED_PARENT_CONSENT_KEYS } from "../../lib/parent-consent.ts";
 import { hashRunnerAccessCode, verifyRunnerAccessCode } from "../../lib/runner-credentials.ts";
+import { decryptRunnerAccessCode, encryptRunnerAccessCode } from "../../lib/runner-credential-vault.ts";
 
 test("runner passcodes are salted, verifiable, and reject incorrect codes", async () => {
   const code = "ABCDEFGH23";
@@ -13,6 +14,17 @@ test("runner passcodes are salted, verifiable, and reject incorrect codes", asyn
   assert.equal(await verifyRunnerAccessCode(code, first), true);
   assert.equal(await verifyRunnerAccessCode("WRONGCODE2", first), false);
   assert.equal(await verifyRunnerAccessCode(code, "invalid"), false);
+});
+
+test("runner access-code vault encryption is authenticated and bound to one runner", () => {
+  const code = "ABCDEFGH23";
+  const runnerId = "11111111-1111-4111-8111-111111111111";
+  const encrypted = encryptRunnerAccessCode(runnerId, code);
+  assert.equal(encrypted.includes(code), false);
+  assert.equal(decryptRunnerAccessCode(runnerId, encrypted), code);
+  assert.equal(decryptRunnerAccessCode("22222222-2222-4222-8222-222222222222", encrypted), null);
+  assert.equal(decryptRunnerAccessCode(runnerId, `${encrypted.slice(0, -1)}A`), null);
+  assert.equal(decryptRunnerAccessCode(runnerId, code), null);
 });
 
 test("parent consent requires every independently named choice", () => {

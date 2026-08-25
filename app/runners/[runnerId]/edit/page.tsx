@@ -1,15 +1,18 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 import { appBaseUrl } from "@/lib/app-url";
 import { logAuditEvent } from "@/lib/audit-log";
 import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
 import { hashRunnerAccessCode } from "@/lib/runner-credentials";
 import { getRunnerCredentialReveal, setRunnerCredentialReveal } from "@/lib/runner-credential-reveal";
+import { decryptRunnerAccessCode, encryptRunnerAccessCode } from "@/lib/runner-credential-vault";
 import { linkGuardianToRunner, upsertGuardianContact } from "@/lib/guardian-contacts";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
@@ -19,6 +22,7 @@ import {
 } from "@/lib/runner-groups";
 import { getCurrentTeamContext } from "@/lib/team-context";
 import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
+import { logSecurityEvent, securityReference } from "@/lib/security-events";
 
 type Group = {
   id: string;
@@ -68,7 +72,37 @@ async function getTeamAccess(userId: string) {
   return {
     coachId: context?.team.owner_coach_id || context?.coach.id,
     teamId: context?.team.id,
+    role: context?.role,
   };
+}
+
+async function verifyHeadCoachPassword(userId: string, password: string, runnerId: string, action: string) {
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") return null;
+  const requestHeaders = await headers();
+  const limit = await checkRateLimit({
+    key: rateLimitKey(["runner-credential", action, userId, requestHeaders.get("x-forwarded-for")?.split(",")[0], runnerId]),
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+  });
+  if (limit.limited || !password || password.length > 256) return null;
+
+  try {
+    const client = await clerkClient();
+    await client.users.verifyPassword({ userId, password });
+    return context;
+  } catch {
+    await logSecurityEvent({
+      teamId: context.team.id,
+      actorType: "coach",
+      actorReference: securityReference(userId),
+      eventType: "credential.reverification_failed",
+      severity: "high",
+      route: `/runners/${runnerId}/edit`,
+      outcome: action,
+    });
+    return null;
+  }
 }
 
 async function updateRunner(runnerId: string, formData: FormData) {
@@ -185,14 +219,16 @@ async function updateRunner(runnerId: string, formData: FormData) {
   redirect("/runners");
 }
 
-async function rotateRunnerCredentials(runnerId: string) {
+async function rotateRunnerCredentials(runnerId: string, formData: FormData) {
   "use server";
 
   const { userId } = await auth();
   if (!userId) redirect("/");
+  const context = await verifyHeadCoachPassword(userId, String(formData.get("coachPassword") || ""), runnerId, "reset");
+  if (!context) redirect(`/runners/${runnerId}/edit?credentialError=password`);
   const supabase = await createServerSupabaseClient();
 
-  const { teamId } = await getTeamAccess(userId);
+  const teamId = context.team.id;
   if (!teamId) redirect("/runners");
 
   const { data: runner } = await supabase
@@ -209,12 +245,13 @@ async function rotateRunnerCredentials(runnerId: string) {
 
   const accessCode = makeAccessCode();
   const accessCodeHash = await hashRunnerAccessCode(accessCode);
+  const encryptedAccessCode = encryptRunnerAccessCode(runnerId, accessCode);
   const username = makeRunnerUsername(runner.first_name, runner.last_name);
 
   const { error } = await supabase
     .from("runners")
     .update({
-      access_code: null,
+      access_code: encryptedAccessCode,
       access_code_hash: accessCodeHash,
       username,
       credential_version: Number(runner.credential_version || 1) + 1,
@@ -228,6 +265,50 @@ async function rotateRunnerCredentials(runnerId: string) {
   }
 
   await setRunnerCredentialReveal(runnerId, username, accessCode);
+
+  await logAuditEvent({
+    teamId,
+    actorCoachId: context.coach.id,
+    actorClerkId: userId,
+    action: "runner_credential.reset",
+    entityType: "runner",
+    entityId: runnerId,
+  });
+
+  revalidatePath(`/runners/${runnerId}/edit`);
+  redirect(`/runners/${runnerId}/edit`);
+}
+
+async function revealRunnerCredentials(runnerId: string, formData: FormData) {
+  "use server";
+
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+  const context = await verifyHeadCoachPassword(userId, String(formData.get("coachPassword") || ""), runnerId, "reveal");
+  if (!context) redirect(`/runners/${runnerId}/edit?credentialError=password`);
+
+  const { data: runner } = await supabaseAdmin
+    .from("runners")
+    .select("id, username, access_code, portal_status")
+    .eq("id", runnerId)
+    .eq("team_id", context.team.id)
+    .maybeSingle();
+
+  if (!runner?.id || runner.portal_status !== "active") redirect("/runners");
+  const accessCode = decryptRunnerAccessCode(runner.id, runner.access_code);
+  if (!accessCode || !runner.username) {
+    redirect(`/runners/${runnerId}/edit?credentialError=reset_required`);
+  }
+
+  await setRunnerCredentialReveal(runner.id, runner.username, accessCode);
+  await logAuditEvent({
+    teamId: context.team.id,
+    actorCoachId: context.coach.id,
+    actorClerkId: userId,
+    action: "runner_credential.revealed",
+    entityType: "runner",
+    entityId: runner.id,
+  });
 
   revalidatePath(`/runners/${runnerId}/edit`);
   redirect(`/runners/${runnerId}/edit`);
@@ -475,7 +556,7 @@ export default async function EditRunnerPage({
 
   const { runnerId } = await params;
   const inviteParams = await searchParams;
-  const { coachId, teamId } = await getTeamAccess(userId);
+  const { coachId, teamId, role } = await getTeamAccess(userId);
   if (!coachId || !teamId) redirect("/runners");
 
   await ensureDefaultRunnerGroups(coachId, supabase, teamId);
@@ -726,28 +807,53 @@ export default async function EditRunnerPage({
         </section>
 
         <div className="mt-6 rounded-xl border border-white/10 bg-white/10 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4">
             <div>
               <h3 className="font-bold text-white">Runner Upload Credentials</h3>
               <p className="mt-1 text-sm text-[#cbd5e1]">Username: <span className="font-mono font-bold text-[#7dd3fc]">{runner.username || "Run the username SQL migration"}</span></p>
               {credentialReveal ? (
                 <div className="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/10 p-3 text-sm text-amber-50">
-                  <p className="font-bold">Copy this passcode now. It will not be shown again.</p>
+                  <p className="font-bold">Access code revealed after coach verification. It will hide again in five minutes.</p>
                   <p className="mt-2">Username: <span className="font-mono font-bold">{credentialReveal.username}</span></p>
-                  <p>Passcode: <span className="font-mono font-bold">{credentialReveal.accessCode}</span></p>
+                  <p>Access code: <span className="font-mono font-bold">{credentialReveal.accessCode}</span></p>
                 </div>
               ) : (
-                <p className="mt-1 text-sm text-[#cbd5e1]">Passcode is securely hashed. Rotate credentials to issue a new one-time passcode.</p>
+                <p className="mt-1 text-sm text-[#cbd5e1]">The access code is hidden. The head coach must enter their own account password to view or reset it.</p>
               )}
             </div>
-            {runner.portal_status === "active" ? <form action={rotateRunnerCredentials.bind(null, runner.id)}>
-              <button type="submit" className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600">
-                Rotate Credentials
-              </button>
-            </form> : (
+
+            {inviteParams?.credentialError && (
+              <p className="rounded-lg border border-red-300/40 bg-red-500/10 p-3 text-sm font-semibold text-red-100">
+                {inviteParams.credentialError === "password" && "The coach password was incorrect, unavailable, or the reveal limit was reached."}
+                {inviteParams.credentialError === "reset_required" && "This older credential has no encrypted vault copy. Reset it once before using View Access Code."}
+                {inviteParams.credentialError === "parent_consent_required" && "Runner access remains locked until the required consent is active."}
+              </p>
+            )}
+
+            {runner.portal_status === "active" && role === "head_coach" ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <form action={revealRunnerCredentials.bind(null, runner.id)} className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <label className="block text-sm font-bold text-white" htmlFor={`reveal-password-${runner.id}`}>Coach account password</label>
+                  <input id={`reveal-password-${runner.id}`} name="coachPassword" type="password" required autoComplete="current-password" className="mt-2 w-full rounded-lg border border-white/20 bg-white px-3 py-2 text-slate-900" />
+                  <button type="submit" className="mt-3 w-full rounded-lg bg-[#00a7ff] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#008ed8]">
+                    View Access Code
+                  </button>
+                </form>
+                <form action={rotateRunnerCredentials.bind(null, runner.id)} className="rounded-lg border border-red-300/20 bg-red-500/5 p-4">
+                  <label className="block text-sm font-bold text-white" htmlFor={`reset-password-${runner.id}`}>Coach account password</label>
+                  <input id={`reset-password-${runner.id}`} name="coachPassword" type="password" required autoComplete="current-password" className="mt-2 w-full rounded-lg border border-white/20 bg-white px-3 py-2 text-slate-900" />
+                  <button type="submit" className="mt-3 w-full rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600">
+                    Create/Reset Access Code
+                  </button>
+                  <p className="mt-2 text-xs text-red-100">Resetting immediately revokes the old code and all runner sessions.</p>
+                </form>
+              </div>
+            ) : runner.portal_status !== "active" ? (
               <span className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-bold text-amber-100">
                 Waiting for parent consent
               </span>
+            ) : (
+              <span className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200">Only the head coach can view or reset runner access codes.</span>
             )}
           </div>
         </div>
