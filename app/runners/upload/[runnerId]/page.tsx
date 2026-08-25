@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { supabase } from "@/lib/supabase";
 import { parseActivityFile } from "@/lib/parse-activity-file";
 import CoachHeader from "@/components/CoachHeader";
 
@@ -51,15 +50,14 @@ function buildTrainingFields(data: {
   const estimatedLoad = manualLoad == null && rpe != null ? (data.durationSeconds / 60) * rpe * 0.6 : null;
 
   return {
-    workout_type: data.workoutType || null,
+    workoutType: data.workoutType || null,
     rpe,
     soreness: nullableNumber(data.soreness),
     illness: data.illness,
-    avg_hr: nullableNumber(data.avgHr),
-    max_hr: nullableNumber(data.maxHr),
-    training_load: manualLoad ?? estimatedLoad,
-    training_load_source: manualLoad != null ? "manual" : estimatedLoad != null ? "estimated_rpe" : "manual",
-    elevation_gain_m: nullableNumber(data.elevationGainM),
+    avgHr: nullableNumber(data.avgHr),
+    maxHr: nullableNumber(data.maxHr),
+    trainingLoad: manualLoad ?? estimatedLoad,
+    elevationGainM: nullableNumber(data.elevationGainM),
   };
 }
 
@@ -104,6 +102,18 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
     return (minutes || 0) * 60 + (seconds || 0);
   }
 
+  async function saveActivity(payload: Record<string, unknown>) {
+    const response = await fetch("/api/coach-activities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) {
+      throw new Error(result?.error || "Activity could not be saved");
+    }
+  }
+
   async function handleSubmit(formData: FormData) {
     const { runnerId } = await params;
     const file = formData.get("file") as File;
@@ -117,17 +127,14 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
         const durationSeconds = durationToSeconds(manualData.duration);
         const paceSeconds = manualData.pace ? paceToSeconds(manualData.pace) : Math.round(durationSeconds / distance);
 
-        const { error } = await supabase.from("activities").insert({
-          runner_id: runnerId,
-          garmin_activity_id: `coach_manual_${Date.now()}`,
-          distance_miles: distance,
-          duration_seconds: durationSeconds,
-          pace_per_mile: paceSeconds,
-          start_time: new Date(manualData.date).toISOString(),
-          verified: false,
-          uploaded_by: "coach",
-          file_type: "manual",
-          original_filename: "Manual entry",
+        await saveActivity({
+          runnerId,
+          distanceMiles: distance,
+          durationSeconds,
+          pacePerMile: paceSeconds,
+          startTime: new Date(manualData.date).toISOString(),
+          fileType: "manual",
+          originalFilename: "Manual entry",
           notes: manualData.notes || null,
           ...buildTrainingFields({
             durationSeconds,
@@ -142,7 +149,6 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
           }),
         });
 
-        if (error) throw error;
         router.push("/runners");
         return;
       }
@@ -166,18 +172,15 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
         const durationSeconds = durationToSeconds(manualData.duration);
         const paceSeconds = manualData.pace ? paceToSeconds(manualData.pace) : Math.round(durationSeconds / distance);
 
-        const { error } = await supabase.from("activities").insert({
-          runner_id: runnerId,
-          garmin_activity_id: `coach_screenshot_${Date.now()}`,
-          distance_miles: distance,
-          duration_seconds: durationSeconds,
-          pace_per_mile: paceSeconds,
-          start_time: new Date(manualData.date).toISOString(),
-          verified: false,
-          uploaded_by: "coach",
-          file_type: "screenshot",
-          original_filename: file.name,
-          screenshot_urls: [uploadResult.url],
+        await saveActivity({
+          runnerId,
+          distanceMiles: distance,
+          durationSeconds,
+          pacePerMile: paceSeconds,
+          startTime: new Date(manualData.date).toISOString(),
+          fileType: "screenshot",
+          originalFilename: file.name,
+          screenshotReference: uploadResult.url,
           notes: manualData.notes || null,
           ...buildTrainingFields({
             durationSeconds,
@@ -192,27 +195,21 @@ export default function CoachUploadForRunnerPage({ params }: Props) {
           }),
         });
 
-        if (error) throw error;
         router.push("/runners");
         return;
       }
 
       const activityData = await parseActivityFile(file, fileType);
       
-      const { error } = await supabase.from("activities").insert({
-        runner_id: runnerId,
-        garmin_activity_id: `coach_upload_${Date.now()}`,
-        distance_miles: activityData.distance_miles,
-        duration_seconds: activityData.duration_seconds,
-        pace_per_mile: activityData.pace_per_mile,
-        start_time: activityData.start_time,
-        verified: false,
-        uploaded_by: "coach",
-        file_type: fileType,
-        original_filename: file.name,
+      await saveActivity({
+        runnerId,
+        distanceMiles: activityData.distance_miles,
+        durationSeconds: activityData.duration_seconds,
+        pacePerMile: activityData.pace_per_mile,
+        startTime: activityData.start_time,
+        fileType,
+        originalFilename: file.name,
       });
-
-      if (error) throw error;
       router.push("/runners");
     } catch (error) {
       console.error("Upload error:", error);
