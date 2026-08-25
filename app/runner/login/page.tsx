@@ -2,13 +2,11 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useClerk } from "@clerk/nextjs";
 import Image from "next/image";
 
 function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { signOut } = useClerk();
   const [username, setUsername] = useState(searchParams.get("username") || "");
   const [passcode, setPasscode] = useState(searchParams.get("code") || "");
   const [error, setError] = useState("");
@@ -37,10 +35,7 @@ function LoginForm() {
       return;
     }
 
-    // Runner accounts are commonly opened on a coach-managed/shared device.
-    // Clear any lingering Clerk coach/guardian session before handing the
-    // browser to the runner so protected adult pages cannot be revisited.
-    await signOut({ redirectUrl: redirectTo });
+    router.push(redirectTo);
   };
 
   return (

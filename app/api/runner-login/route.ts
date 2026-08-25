@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { checkRateLimit, clientIpFromHeaders, rateLimitKey } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { setRunnerSession } from "@/lib/runner-session";
@@ -79,6 +80,20 @@ export async function POST(request: Request) {
       .eq("credential_version", runner.credential_version);
 
     if (upgradeError) {
+      return NextResponse.json({ error: "Runner login is temporarily unavailable" }, { status: 503 });
+    }
+  }
+
+  // A coach may provision a runner on a shared browser. Revoke any active
+  // adult Clerk session before issuing the runner session so the browser
+  // cannot return to authenticated coach or guardian pages.
+  const { sessionId: adultSessionId } = await auth();
+  if (adultSessionId) {
+    try {
+      const client = await clerkClient();
+      await client.sessions.revokeSession(adultSessionId);
+    } catch {
+      await logSecurityEvent({ teamId: runner.team_id, actorType: "runner", actorReference: securityReference(runner.id), eventType: "auth.adult_session_revocation_failed", severity: "high", route: "/api/runner-login", outcome: "blocked" });
       return NextResponse.json({ error: "Runner login is temporarily unavailable" }, { status: 503 });
     }
   }

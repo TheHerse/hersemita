@@ -40,10 +40,11 @@ test("runner sessions are nonpersistent and expire within 12 hours", async () =>
   assert.match(source, /runner\.session_version\) !== session\.sessionVersion/);
 });
 
-test("runner login clears any lingering adult Clerk session", async () => {
-  const source = await readFile(new URL("../../app/runner/login/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /useClerk/);
-  assert.match(source, /await signOut\(\{ redirectUrl: redirectTo \}\)/);
+test("runner login revokes any lingering adult Clerk session before issuing its cookie", async () => {
+  const source = await readFile(new URL("../../app/api/runner-login/route.ts", import.meta.url), "utf8");
+  assert.match(source, /await client\.sessions\.revokeSession\(adultSessionId\)/);
+  assert.ok(source.indexOf("revokeSession(adultSessionId)") < source.indexOf("setRunnerSession(runner.id"));
+  assert.match(source, /auth\.adult_session_revocation_failed/);
 });
 
 test("parent consent requires every independently named choice", () => {
