@@ -89,9 +89,15 @@ function latestActivity(activities: Activity[]) {
   return [...activities].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())[0] || null;
 }
 
-export default async function ParentDashboardPage() {
+export default async function ParentDashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ consent?: string }>;
+}) {
   const { userId } = await auth();
   if (!userId) redirect("/parent/sign-in");
+
+  const query = await searchParams;
 
   const context = await getParentPortalContext(userId);
   const runners = context?.runners || [];
@@ -144,6 +150,12 @@ export default async function ParentDashboardPage() {
       <ParentHeader />
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+        {query?.consent === "withdrawn" && (
+          <div role="status" className="mb-6 rounded-xl border border-emerald-300/50 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-950 shadow-sm">
+            Authorization was withdrawn successfully. The runner portal and its existing credentials have been disabled immediately.
+          </div>
+        )}
+
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/10 p-5 text-white shadow-2xl shadow-black/10 backdrop-blur sm:p-6">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">Parent Portal</p>
           <h1 className="mt-2 text-3xl font-bold sm:text-4xl">

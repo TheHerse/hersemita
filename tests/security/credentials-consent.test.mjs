@@ -47,6 +47,13 @@ test("runner login revokes any lingering adult Clerk session before issuing its 
   assert.match(source, /auth\.adult_session_revocation_failed/);
 });
 
+test("parent withdrawal redirect displays an explicit success confirmation", async () => {
+  const source = await readFile(new URL("../../app/parent/dashboard/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /query\?\.consent === "withdrawn"/);
+  assert.match(source, /Authorization was withdrawn successfully/);
+  assert.match(source, /role="status"/);
+});
+
 test("parent consent requires every independently named choice", () => {
   const form = new FormData();
   REQUIRED_PARENT_CONSENT_KEYS.forEach((key) => form.set(key, "on"));
