@@ -30,14 +30,28 @@ export async function getPrivacyRequestSubjects(userId: string): Promise<Privacy
   }
 
   const parentContext = await getParentPortalContext(userId);
-  for (const runner of parentContext?.runners || []) {
-    if (!subjects.has(runner.id)) {
-      subjects.set(runner.id, {
-        id: runner.id,
-        teamId: runner.team_id,
-        name: `${runner.first_name} ${runner.last_name}`.trim(),
-        role: "parent_guardian",
-      });
+  const guardianIds = (parentContext?.guardians || []).map((guardian) => guardian.id);
+  if (guardianIds.length > 0) {
+    const { data: guardianLinks } = await supabaseAdmin
+      .from("runner_guardians")
+      .select("runners!inner(id, team_id, first_name, last_name, age_status, adult_parent_access_enabled)")
+      .in("guardian_id", guardianIds);
+
+    for (const link of guardianLinks || []) {
+      const linked = Array.isArray(link.runners) ? link.runners[0] : link.runners;
+      if (!linked?.id) continue;
+      // Withdrawal or suspension must not remove a guardian's ability to
+      // request retained records. Adult-runner records remain subject to the
+      // adult's explicit parent-access choice.
+      if (linked.age_status === "adult_18_plus" && !linked.adult_parent_access_enabled) continue;
+      if (!subjects.has(linked.id)) {
+        subjects.set(linked.id, {
+          id: linked.id,
+          teamId: linked.team_id,
+          name: `${linked.first_name} ${linked.last_name}`.trim(),
+          role: "parent_guardian",
+        });
+      }
     }
   }
 

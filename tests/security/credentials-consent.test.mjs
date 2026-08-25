@@ -54,6 +54,14 @@ test("parent withdrawal redirect displays an explicit success confirmation", asy
   assert.match(source, /role="status"/);
 });
 
+test("withdrawn minors remain available for authorized guardian privacy requests", async () => {
+  const source = await readFile(new URL("../../lib/privacy-request-access.ts", import.meta.url), "utf8");
+  assert.match(source, /runner_guardians/);
+  assert.match(source, /guardianIds/);
+  assert.doesNotMatch(source, /portal_status.*active/);
+  assert.match(source, /adult_18_plus.*adult_parent_access_enabled/);
+});
+
 test("parent consent requires every independently named choice", () => {
   const form = new FormData();
   REQUIRED_PARENT_CONSENT_KEYS.forEach((key) => form.set(key, "on"));
