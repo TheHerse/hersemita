@@ -36,7 +36,13 @@ async function submitPrivacyRequest(formData: FormData) {
     p_request_type: requestType,
     p_details: details,
   });
-  if (error) redirect("/privacy/requests?error=Privacy%20request%20storage%20is%20not%20ready.");
+  if (error) {
+    console.error("Privacy request submission failed", {
+      code: error.code,
+      message: error.message,
+    });
+    redirect("/privacy/requests?error=Privacy%20request%20could%20not%20be%20recorded.%20Please%20try%20again.");
+  }
   redirect("/privacy/requests?submitted=1");
 }
 
