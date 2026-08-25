@@ -19,6 +19,9 @@ export type ParentRunner = {
   last_name: string;
   grade: number | null;
   username: string | null;
+  portal_status: "pending_parent_consent" | "active" | "suspended" | "revoked";
+  age_status: "unknown" | "under_13" | "minor_13_to_17" | "adult_18_plus";
+  adult_parent_access_enabled: boolean;
 };
 
 export type ParentPortalContext = {
@@ -26,6 +29,7 @@ export type ParentPortalContext = {
   emails: string[];
   guardians: ParentGuardianContact[];
   runners: ParentRunner[];
+  pendingRunners: ParentRunner[];
 };
 
 type RunnerLinkRow = {
@@ -86,13 +90,15 @@ export async function getParentPortalContext(userId: string): Promise<ParentPort
       emails,
       guardians: [],
       runners: [],
+      pendingRunners: [],
     };
   }
 
   const guardianIds = safeGuardians.map((guardian) => guardian.id);
   const { data: runnerLinks } = await supabaseAdmin
     .from("runner_guardians")
-    .select("runners(id, team_id, first_name, last_name, grade, username)")
+    .select("runners!inner(id, team_id, first_name, last_name, grade, username, portal_status, age_status, adult_parent_access_enabled, archived_at)")
+    .is("runners.archived_at", null)
     .in("guardian_id", guardianIds);
 
   const runnersById = new Map<string, ParentRunner>();
@@ -108,6 +114,12 @@ export async function getParentPortalContext(userId: string): Promise<ParentPort
     clerkId: userId,
     emails,
     guardians: safeGuardians,
-    runners: Array.from(runnersById.values()),
+    runners: Array.from(runnersById.values()).filter((runner) =>
+      runner.portal_status === "active" &&
+      (runner.age_status !== "adult_18_plus" || runner.adult_parent_access_enabled)
+    ),
+    pendingRunners: Array.from(runnersById.values()).filter((runner) =>
+      runner.portal_status === "pending_parent_consent" && runner.age_status !== "adult_18_plus"
+    ),
   };
 }

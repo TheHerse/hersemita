@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getRunnerSession } from "@/lib/runner-session";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
+import { isPlainObject, readBoundedJson } from "@/lib/request-body";
 
 function parseNumber(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return null;
@@ -58,12 +60,19 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!hasTrustedRequestOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
   const session = await getRunnerSession();
   if (!session) {
     return NextResponse.json({ error: "Runner session required" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null);
+  const parsedBody = await readBoundedJson(request, 8 * 1024);
+  if (!parsedBody.ok) {
+    return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+  }
+  const body = isPlainObject(parsedBody.value) ? parsedBody.value : null;
   const logDate = parseString(body?.logDate) || todayIsoDate();
   const hrvMs = parseNumber(body?.hrvMs);
   const hrvStatus = parseHrvStatus(body?.hrvStatus);
@@ -73,10 +82,20 @@ export async function POST(request: Request) {
   const bodyBattery = parseIntegerInRange(body?.bodyBattery, 0, 100);
   const soreness = parseIntegerInRange(body?.soreness, 1, 10);
   const illness = parseBoolean(body?.illness);
-  const notes = parseString(body?.notes);
+  const notes = parseString(body?.notes).slice(0, 1000);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(logDate)) {
+  const parsedLogDate = /^\d{4}-\d{2}-\d{2}$/.test(logDate)
+    ? new Date(`${logDate}T00:00:00.000Z`)
+    : null;
+  if (!parsedLogDate || !Number.isFinite(parsedLogDate.getTime()) || parsedLogDate.toISOString().slice(0, 10) !== logDate) {
     return NextResponse.json({ error: "Invalid check-in date" }, { status: 400 });
+  }
+
+  const today = todayIsoDate();
+  const earliest = new Date();
+  earliest.setUTCFullYear(earliest.getUTCFullYear() - 1);
+  if (logDate > today || parsedLogDate < earliest) {
+    return NextResponse.json({ error: "Check-in date is outside the allowed range" }, { status: 400 });
   }
 
   if (

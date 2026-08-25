@@ -249,7 +249,7 @@ export default async function ActivitiesPage({
                   </div>
                 )}
 
-                <ScreenshotProofViewer urls={activity.screenshot_urls} />
+                <ScreenshotProofViewer activityId={activity.id} count={activity.screenshot_urls?.length || 0} />
 
                 <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end">
                   <Link href={`/activities/${activity.id}/edit`} className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-white/15">

@@ -8,6 +8,8 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { appBaseUrl } from "@/lib/app-url";
 import { logAuditEvent } from "@/lib/audit-log";
 import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
+import { hashRunnerAccessCode } from "@/lib/runner-credentials";
+import { getRunnerCredentialReveal, setRunnerCredentialReveal } from "@/lib/runner-credential-reveal";
 import { linkGuardianToRunner, upsertGuardianContact } from "@/lib/guardian-contacts";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
@@ -84,18 +86,28 @@ async function updateRunner(runnerId: string, formData: FormData) {
   const grade = parseInt(formData.get("grade") as string);
   const division = formData.get("division") as RunnerDivision;
   const parentPhone = (formData.get("parentPhone") as string)?.trim();
+  const ageStatus = String(formData.get("ageStatus") || "");
+  const runnerEmail = String(formData.get("runnerEmail") || "").trim().toLowerCase();
   const customGroupIds = formData.getAll("groups") as string[];
 
   const { data: runner } = await supabase
     .from("runners")
-    .select("id")
+    .select("id, age_status, portal_status, credential_version, session_version")
     .eq("id", runnerId)
     .eq("team_id", teamId)
     .single();
 
-  if (!runner?.id || !firstName || !lastName || !grade || !division) {
+  if (!runner?.id || !firstName || !lastName || !grade || !division || !new Set(["minor_13_to_17", "adult_18_plus"]).has(ageStatus)) {
     redirect("/runners");
   }
+  if (ageStatus === "adult_18_plus" && !runnerEmail) {
+    throw new Error("An adult runner email is required for adult self-consent.");
+  }
+
+  const ageChanged = runner.age_status !== ageStatus;
+  const portalStatus = ageChanged
+    ? ageStatus === "adult_18_plus" ? "pending_adult_consent" : "pending_parent_consent"
+    : runner.portal_status;
 
   const { error } = await supabase
     .from("runners")
@@ -104,6 +116,18 @@ async function updateRunner(runnerId: string, formData: FormData) {
       last_name: lastName,
       grade,
       parent_phone: parentPhone || null,
+      runner_email: runnerEmail || null,
+      age_status: ageStatus,
+      age_status_attested_at: new Date().toISOString(),
+      age_status_attested_by: userId,
+      age_status_season: new Date().getFullYear().toString(),
+      portal_status: portalStatus,
+      ...(ageChanged ? {
+        access_code: null,
+        access_code_hash: null,
+        credential_version: Number(runner.credential_version || 1) + 1,
+        session_version: Number(runner.session_version || 1) + 1,
+      } : {}),
     })
     .eq("id", runner.id)
     .eq("team_id", teamId);
@@ -173,18 +197,28 @@ async function rotateRunnerCredentials(runnerId: string) {
 
   const { data: runner } = await supabase
     .from("runners")
-    .select("first_name, last_name")
+    .select("first_name, last_name, credential_version, session_version, portal_status")
     .eq("id", runnerId)
     .eq("team_id", teamId)
     .single();
 
   if (!runner) redirect("/runners");
+  if (runner.portal_status !== "active") {
+    redirect(`/runners/${runnerId}/edit?credentialError=parent_consent_required`);
+  }
+
+  const accessCode = makeAccessCode();
+  const accessCodeHash = await hashRunnerAccessCode(accessCode);
+  const username = makeRunnerUsername(runner.first_name, runner.last_name);
 
   const { error } = await supabase
     .from("runners")
     .update({
-      access_code: makeAccessCode(),
-      username: makeRunnerUsername(runner.first_name, runner.last_name),
+      access_code: null,
+      access_code_hash: accessCodeHash,
+      username,
+      credential_version: Number(runner.credential_version || 1) + 1,
+      session_version: Number(runner.session_version || 1) + 1,
     })
     .eq("id", runnerId)
     .eq("team_id", teamId);
@@ -192,6 +226,8 @@ async function rotateRunnerCredentials(runnerId: string) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await setRunnerCredentialReveal(runnerId, username, accessCode);
 
   revalidatePath(`/runners/${runnerId}/edit`);
   redirect(`/runners/${runnerId}/edit`);
@@ -431,7 +467,7 @@ export default async function EditRunnerPage({
   searchParams,
 }: {
   params: Promise<{ runnerId: string }>;
-  searchParams?: Promise<{ parentInvite?: string; parentInviteError?: string; guardianSaved?: string }>;
+  searchParams?: Promise<{ parentInvite?: string; parentInviteError?: string; guardianSaved?: string; credentialError?: string }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
@@ -447,7 +483,7 @@ export default async function EditRunnerPage({
   const [{ data: runner }, { data: groups }, { data: guardianLinks }] = await Promise.all([
     supabase
       .from("runners")
-      .select("id, first_name, last_name, grade, parent_phone, access_code, username")
+      .select("id, first_name, last_name, grade, parent_phone, username, portal_status, age_status, runner_email")
       .eq("id", runnerId)
       .eq("team_id", teamId)
       .single(),
@@ -464,6 +500,8 @@ export default async function EditRunnerPage({
   ]);
 
   if (!runner) redirect("/runners");
+
+  const credentialReveal = await getRunnerCredentialReveal(runner.id);
 
   const safeGroups = (groups || []) as Group[];
   const customGroups = safeGroups.filter((group) => !DEFAULT_RUNNER_GROUP_NAMES.includes(group.name));
@@ -561,6 +599,21 @@ export default async function EditRunnerPage({
                 </span>
               </label>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Legal age status</label>
+            <select name="ageStatus" required defaultValue={runner.age_status === "adult_18_plus" ? "adult_18_plus" : "minor_13_to_17"} className="w-full rounded-lg border-2 border-slate-200 bg-white px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none">
+              <option value="minor_13_to_17">Age 13–17</option>
+              <option value="adult_18_plus">Age 18 or older</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Changing this status revokes existing runner credentials and requires fresh consent.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Runner Email</label>
+            <input name="runnerEmail" type="email" defaultValue={runner.runner_email || ""} placeholder="runner@example.com" className="w-full rounded-lg border-2 border-slate-200 px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none" />
+            <p className="mt-1 text-xs text-slate-500">Required for adult self-consent. Do not enter a parent email.</p>
           </div>
 
           <div>
@@ -677,13 +730,25 @@ export default async function EditRunnerPage({
             <div>
               <h3 className="font-bold text-white">Runner Upload Credentials</h3>
               <p className="mt-1 text-sm text-[#cbd5e1]">Username: <span className="font-mono font-bold text-[#7dd3fc]">{runner.username || "Run the username SQL migration"}</span></p>
-              <p className="mt-1 text-sm text-[#cbd5e1]">Passcode: <span className="font-mono font-bold text-[#7dd3fc]">{runner.access_code}</span></p>
+              {credentialReveal ? (
+                <div className="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/10 p-3 text-sm text-amber-50">
+                  <p className="font-bold">Copy this passcode now. It will not be shown again.</p>
+                  <p className="mt-2">Username: <span className="font-mono font-bold">{credentialReveal.username}</span></p>
+                  <p>Passcode: <span className="font-mono font-bold">{credentialReveal.accessCode}</span></p>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-[#cbd5e1]">Passcode is securely hashed. Rotate credentials to issue a new one-time passcode.</p>
+              )}
             </div>
-            <form action={rotateRunnerCredentials.bind(null, runner.id)}>
+            {runner.portal_status === "active" ? <form action={rotateRunnerCredentials.bind(null, runner.id)}>
               <button type="submit" className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600">
                 Rotate Credentials
               </button>
-            </form>
+            </form> : (
+              <span className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-bold text-amber-100">
+                Waiting for parent consent
+              </span>
+            )}
           </div>
         </div>
       </main>

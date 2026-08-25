@@ -268,7 +268,7 @@ export default async function EditActivityPage({
             <span className="font-bold text-white">Mark as verified</span>
           </label>
 
-          <ScreenshotProofViewer urls={activity.screenshot_urls} />
+          <ScreenshotProofViewer activityId={activity.id} count={activity.screenshot_urls?.length || 0} />
 
           <button type="submit" className="w-full rounded-lg bg-gradient-to-r from-[#00ff67] to-[#00a7ff] px-4 py-3 text-lg font-bold text-white transition hover:shadow-lg hover:shadow-[#00a7ff]/25">
             Save Activity

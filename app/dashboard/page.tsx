@@ -123,7 +123,8 @@ export default async function DashboardPage() {
   const { data: runners } = await supabase
     .from("runners")
     .select("*")
-    .eq("team_id", teamId);
+    .eq("team_id", teamId)
+    .is("archived_at", null);
 
   // Make sure to select the new columns from Supabase
   const { data: activities } = await supabase
@@ -136,9 +137,11 @@ export default async function DashboardPage() {
         last_name,
         parent_phone,
         team_id
+        ,archived_at
       )
     `)
     .eq("runners.team_id", teamId)
+    .is("runners.archived_at", null)
     .order("start_time", { ascending: false });
 
   const [{ data: weeklyLoads }, { data: recoveryLogs }, { data: coachAlerts }] = teamId
@@ -467,7 +470,7 @@ export default async function DashboardPage() {
                           </form>
                         </div>
                       </div>
-                      {hasProof && <ScreenshotProofViewer urls={activity.screenshot_urls} />}
+                      {hasProof && <ScreenshotProofViewer activityId={activity.id} count={activity.screenshot_urls.length} />}
                     </div>
                   );
                 })}

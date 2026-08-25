@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getRunnerSession } from "@/lib/runner-session";
 import { distanceToMiles, normalizeDistanceUnit, paceToMiles } from "@/lib/distance-units";
+import { runnerOwnsActivityScreenshotReference } from "@/lib/activity-screenshot-storage";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
+import { isPlainObject, readBoundedJson } from "@/lib/request-body";
 
 function parseNumber(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return null;
@@ -31,12 +34,19 @@ function parseWorkoutType(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  if (!hasTrustedRequestOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
   const session = await getRunnerSession();
   if (!session) {
     return NextResponse.json({ error: "Runner session required" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null);
+  const parsedBody = await readBoundedJson(request, 16 * 1024);
+  if (!parsedBody.ok) {
+    return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+  }
+  const body = isPlainObject(parsedBody.value) ? parsedBody.value : null;
   const screenshotUrls: string[] = Array.isArray(body?.screenshotUrls)
     ? body.screenshotUrls.filter((url: unknown): url is string => typeof url === "string")
     : [];
@@ -51,11 +61,29 @@ export async function POST(request: Request) {
   const trainingLoadInput = parseNumber(body?.trainingLoad);
   const trainingLoad = trainingLoadInput ?? (durationSeconds != null && rpe != null ? (durationSeconds / 60) * rpe * 0.6 : null);
 
-  if (distanceMiles == null || durationSeconds == null || !date) {
+  if (
+    distanceMiles == null ||
+    distanceMiles <= 0 ||
+    distanceMiles > 200 ||
+    durationSeconds == null ||
+    durationSeconds <= 0 ||
+    durationSeconds > 7 * 24 * 60 * 60 ||
+    !date ||
+    screenshotUrls.length > 3
+  ) {
     return NextResponse.json({ error: "Missing run details" }, { status: 400 });
   }
 
-  const invalidScreenshot = screenshotUrls.some((url) => !url.includes(`/activity-screenshots/${session.runnerId}/`));
+  const startTime = new Date(date);
+  if (!Number.isFinite(startTime.getTime()) || startTime.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: "Invalid activity date" }, { status: 400 });
+  }
+
+  if (trainingLoad != null && (trainingLoad < 0 || trainingLoad > 10000)) {
+    return NextResponse.json({ error: "Invalid training load" }, { status: 400 });
+  }
+
+  const invalidScreenshot = screenshotUrls.some((url) => !runnerOwnsActivityScreenshotReference(url, session.runnerId));
   if (invalidScreenshot) {
     return NextResponse.json({ error: "Screenshot path does not match runner session" }, { status: 400 });
   }
@@ -66,15 +94,15 @@ export async function POST(request: Request) {
     distance_miles: distanceMiles,
     duration_seconds: durationSeconds,
     pace_per_mile: paceSeconds,
-    start_time: new Date(date).toISOString(),
+    start_time: startTime.toISOString(),
     verified: false,
     uploaded_by: "runner",
     file_type: screenshotUrls.length > 0 ? "screenshot" : "manual",
     screenshot_urls: screenshotUrls,
-    detected_app: parseString(body?.detectedApp) || null,
-    raw_distance: parseString(body?.rawDistance) || null,
-    raw_pace: parseString(body?.rawPace) || null,
-    notes: parseString(body?.notes) || null,
+    detected_app: parseString(body?.detectedApp).slice(0, 100) || null,
+    raw_distance: parseString(body?.rawDistance).slice(0, 100) || null,
+    raw_pace: parseString(body?.rawPace).slice(0, 100) || null,
+    notes: parseString(body?.notes).slice(0, 2000) || null,
     workout_type: parseWorkoutType(body?.workoutType),
     avg_hr: parseIntegerInRange(body?.avgHr, 1, 250),
     max_hr: parseIntegerInRange(body?.maxHr, 1, 250),

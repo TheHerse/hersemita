@@ -95,6 +95,7 @@ export default async function ParentDashboardPage() {
 
   const context = await getParentPortalContext(userId);
   const runners = context?.runners || [];
+  const pendingRunners = context?.pendingRunners || [];
   const runnerIds = runners.map((runner) => runner.id);
 
   const [{ data: activities }, { data: alerts }, { data: teams }] =
@@ -146,16 +147,33 @@ export default async function ParentDashboardPage() {
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/10 p-5 text-white shadow-2xl shadow-black/10 backdrop-blur sm:p-6">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">Parent Portal</p>
           <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
-            {runners.length > 0 ? "Runner Progress" : "No runners linked yet"}
+            {runners.length > 0 ? "Runner Progress" : pendingRunners.length > 0 ? "Parent authorization required" : "No runners linked yet"}
           </h1>
           <p className="mt-2 max-w-3xl text-[#cbd5e1]">
             {runners.length > 0
               ? `Viewing verified training updates for ${runners.map(runnerName).join(", ")}.`
+              : pendingRunners.length > 0
+                ? "Review and approve each pending runner before the runner portal can be used."
               : "Ask your coach to add your email to your parent or guardian contact record."}
           </p>
         </section>
 
-        {runners.length === 0 ? (
+        {pendingRunners.length > 0 && (
+          <section className="mb-6 rounded-2xl border border-amber-300/40 bg-amber-100 p-6 text-slate-900 shadow-lg">
+            <h2 className="text-xl font-bold">Runner portal activation</h2>
+            <p className="mt-2 text-sm text-slate-700">These runner accounts remain locked until you review and complete the required authorization.</p>
+            <div className="mt-4 grid gap-3">
+              {pendingRunners.map((runner) => (
+                <Link key={runner.id} href={`/parent/consent/${runner.id}`} className="flex items-center justify-between rounded-lg bg-white px-4 py-3 font-bold text-slate-900 shadow-sm transition hover:bg-amber-50">
+                  <span>{runnerName(runner)} · Grade {runner.grade ?? "--"}</span>
+                  <span className="text-[#007ab8]">Review consent →</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {runners.length === 0 && pendingRunners.length === 0 ? (
           <section className="section-card p-6 text-center">
             <h2 className="text-xl font-bold text-slate-900">Waiting for coach approval</h2>
             <p className="mx-auto mt-2 max-w-2xl text-sm text-slate-600">

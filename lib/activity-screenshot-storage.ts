@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const ACTIVITY_SCREENSHOT_BUCKET = "activity-screenshots";
 const STORAGE_LIST_LIMIT = 1000;
+const SIGNED_URL_TTL_SECONDS = 60;
 
 export function storagePathFromActivityScreenshotUrl(url: string) {
   try {
@@ -27,6 +28,27 @@ export function storagePathFromActivityScreenshotUrl(url: string) {
   }
 
   return null;
+}
+
+export function activityScreenshotReference(path: string) {
+  return `${ACTIVITY_SCREENSHOT_BUCKET}/${path}`;
+}
+
+export function runnerOwnsActivityScreenshotReference(reference: string, runnerId: string) {
+  const path = storagePathFromActivityScreenshotUrl(reference);
+  return Boolean(path && path.startsWith(`${runnerId}/`) && !path.includes(".."));
+}
+
+export async function createActivityScreenshotSignedUrl(reference: string) {
+  const path = storagePathFromActivityScreenshotUrl(reference);
+  if (!path || path.includes("..")) return null;
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(ACTIVITY_SCREENSHOT_BUCKET)
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
 }
 
 export async function removeActivityScreenshots(urls?: string[] | null) {

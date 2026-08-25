@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import PhoneNumberInput from "@/components/PhoneNumberInput";
 import CoachHeader from "@/components/CoachHeader";
-import { makeAccessCode, makeRunnerUsername } from "@/lib/runner-access";
+import { makeRunnerUsername } from "@/lib/runner-access";
 import { syncPrimaryRunnerGuardian } from "@/lib/guardian-contacts";
 import {
   DEFAULT_RUNNER_GROUP_NAMES,
@@ -57,10 +57,18 @@ export default async function NewRunnerPage() {
     const division = formData.get("division") as RunnerDivision;
     const parentPhone = formData.get("parentPhone") as string;
     const parentEmail = formData.get("parentEmail") as string;
+    const ageStatus = String(formData.get("ageStatus") || "");
+    const runnerEmail = String(formData.get("runnerEmail") || "").trim().toLowerCase();
     const customGroupIds = formData.getAll("groups") as string[];
     
-    const accessCode = makeAccessCode();
     const username = makeRunnerUsername(firstName, lastName);
+
+    if (!new Set(["minor_13_to_17", "adult_18_plus"]).has(ageStatus)) {
+      throw new Error("High-school runners must be identified as age 13–17 or age 18+.");
+    }
+    if (ageStatus === "adult_18_plus" && !runnerEmail) {
+      throw new Error("An adult runner email is required for adult self-consent.");
+    }
 
     const teamContext = await getCurrentTeamContext(userId);
     const legacyCoachId = teamContext?.team.owner_coach_id || teamContext?.coach.id;
@@ -80,7 +88,14 @@ export default async function NewRunnerPage() {
         last_name: lastName,
         grade,
         parent_phone: parentPhone,
-        access_code: accessCode,
+        access_code: null,
+        access_code_hash: null,
+        portal_status: ageStatus === "adult_18_plus" ? "pending_adult_consent" : "pending_parent_consent",
+        age_status: ageStatus,
+        age_status_attested_at: new Date().toISOString(),
+        age_status_attested_by: userId,
+        age_status_season: new Date().getFullYear().toString(),
+        runner_email: runnerEmail || null,
         username,
       })
       .select("id")
@@ -129,7 +144,7 @@ export default async function NewRunnerPage() {
       }
     }
     
-    redirect("/runners");
+    redirect(`/runners/${newRunner?.id}/edit`);
   }
 
   return (
@@ -186,6 +201,22 @@ export default async function NewRunnerPage() {
                     </span>
                   </label>
                 </div>
+            </div>
+
+            <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Legal age status</label>
+                <select name="ageStatus" required defaultValue="" className="w-full rounded-lg border-2 border-slate-200 bg-white px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none">
+                  <option value="" disabled>Select age status</option>
+                  <option value="minor_13_to_17">Age 13–17</option>
+                  <option value="adult_18_plus">Age 18 or older</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Hersemita does not store a birth date. Children under 13 cannot be enrolled.</p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Runner Email</label>
+                <input name="runnerEmail" type="email" placeholder="runner@example.com" className="w-full rounded-lg border-2 border-slate-200 px-4 py-2 transition-colors focus:border-[#00a7ff] focus:outline-none" />
+                <p className="mt-1 text-xs text-slate-500">Required for runners age 18+ so they can consent for themselves. Do not enter a parent email here.</p>
             </div>
           
             <div>

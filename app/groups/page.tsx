@@ -207,6 +207,7 @@ export default async function GroupsPage({
           .from("runners")
           .select("id, first_name, last_name, grade")
           .eq("team_id", teamId)
+          .is("archived_at", null)
           .order("first_name", { ascending: true })
           .order("last_name", { ascending: true }),
       ])

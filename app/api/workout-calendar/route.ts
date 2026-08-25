@@ -3,6 +3,9 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getCurrentTeamContext } from "@/lib/team-context";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
+import { isPlainObject, readBoundedJson } from "@/lib/request-body";
+import { logAuditEvent } from "@/lib/audit-log";
 
 type TemplatePayload = {
   id: string;
@@ -36,6 +39,93 @@ type ActivityRecord = {
   start_time: string;
   verified: boolean | null;
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WORKOUT_KINDS = new Set(["run", "intervals", "tempo", "long", "recovery", "strength", "track", "meet"]);
+const TARGET_TYPES = new Set(["team", "group", "runner"]);
+
+function boundedString(value: unknown, maxLength: number, required = false) {
+  if (typeof value !== "string") return null;
+  const result = value.trim();
+  if ((required && !result) || result.length > maxLength) return null;
+  return result;
+}
+
+function validIsoDate(value: unknown) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function parseCalendarPayload(value: unknown) {
+  if (!isPlainObject(value)) return null;
+  if (!Array.isArray(value.templates) || !Array.isArray(value.assignments)) return null;
+  if (value.templates.length > 250 || value.assignments.length > 2500) return null;
+  if (value.revision != null && (typeof value.revision !== "string" || !/^[a-f0-9]{64}$/i.test(value.revision))) return null;
+
+  const templates: TemplatePayload[] = [];
+  const templateIds = new Set<string>();
+  for (const raw of value.templates) {
+    if (!isPlainObject(raw)) return null;
+    const id = boundedString(raw.id, 36, true);
+    const title = boundedString(raw.title, 120, true);
+    const kind = boundedString(raw.kind, 20, true);
+    if (!id || !UUID_PATTERN.test(id) || templateIds.has(id) || !title || !kind || !WORKOUT_KINDS.has(kind)) return null;
+    if (!Array.isArray(raw.tags) || raw.tags.length > 20) return null;
+    const tags = raw.tags.map((tag) => boundedString(tag, 40, true));
+    if (tags.some((tag) => tag == null)) return null;
+    const fields = {
+      miles: boundedString(raw.miles, 40),
+      pace: boundedString(raw.pace, 80),
+      warmup: boundedString(raw.warmup, 2000),
+      mainSet: boundedString(raw.mainSet, 4000),
+      cooldown: boundedString(raw.cooldown, 2000),
+      strength: boundedString(raw.strength, 2000),
+      location: boundedString(raw.location, 200),
+      notes: boundedString(raw.notes, 4000),
+    };
+    if (Object.values(fields).some((field) => field == null)) return null;
+    const createdAt = boundedString(raw.createdAt, 40);
+    if (createdAt && !Number.isFinite(new Date(createdAt).getTime())) return null;
+    templateIds.add(id);
+    templates.push({
+      id,
+      title,
+      kind,
+      miles: fields.miles!,
+      pace: fields.pace!,
+      warmup: fields.warmup!,
+      mainSet: fields.mainSet!,
+      cooldown: fields.cooldown!,
+      strength: fields.strength!,
+      location: fields.location!,
+      notes: fields.notes!,
+      tags: tags as string[],
+      createdAt: createdAt || "",
+    });
+  }
+
+  const assignments: AssignmentPayload[] = [];
+  const assignmentIds = new Set<string>();
+  for (const raw of value.assignments) {
+    if (!isPlainObject(raw)) return null;
+    const id = boundedString(raw.id, 36, true);
+    const date = boundedString(raw.date, 10, true);
+    const templateId = boundedString(raw.templateId, 36, true);
+    const targetType = boundedString(raw.targetType, 10, true);
+    const targetId = boundedString(raw.targetId, 36, true);
+    const targetLabel = boundedString(raw.targetLabel, 120, true);
+    if (!id || !UUID_PATTERN.test(id) || assignmentIds.has(id) || !date || !validIsoDate(date) ||
+        !templateId || !templateIds.has(templateId) || !targetType || !TARGET_TYPES.has(targetType) ||
+        !targetId || !targetLabel) return null;
+    if (targetType !== "team" && !UUID_PATTERN.test(targetId)) return null;
+    if (targetType === "team" && targetId !== "team") return null;
+    assignmentIds.add(id);
+    assignments.push({ id, date, templateId, targetType: targetType as AssignmentPayload["targetType"], targetId, targetLabel });
+  }
+
+  return { templates, assignments, revision: value.revision as string | null | undefined };
+}
 
 function calendarRevision(
   templates: Array<Record<string, unknown>> | null | undefined,
@@ -180,19 +270,25 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  if (!hasTrustedRequestOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
   const { supabase, coachId, teamId } = await getCoach();
   if (!supabase || !coachId || !teamId) {
     return NextResponse.json({ error: "Coach profile required" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null) as {
-    templates?: TemplatePayload[];
-    assignments?: AssignmentPayload[];
-    revision?: string | null;
-  } | null;
+  const parsedBody = await readBoundedJson(request, 1024 * 1024);
+  if (!parsedBody.ok) {
+    return NextResponse.json({ error: parsedBody.error }, { status: parsedBody.status });
+  }
+  const body = parseCalendarPayload(parsedBody.value);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid calendar data" }, { status: 400 });
+  }
 
-  const templates = body?.templates || [];
-  const assignments = body?.assignments || [];
+  const templates = body.templates;
+  const assignments = body.assignments;
 
   const [{ data: currentTemplates, error: currentTemplateError }, { data: currentAssignments, error: currentAssignmentError }] = await Promise.all([
     supabase
@@ -298,6 +394,12 @@ export async function PUT(request: Request) {
       .select("id, assigned_date, template_id, target_type, target_id, target_label")
       .eq("team_id", teamId),
   ]);
+
+  await logAuditEvent({
+    teamId, actorCoachId: coachId, actorClerkId: (await auth()).userId,
+    action: "workout_calendar.replaced", entityType: "team", entityId: teamId,
+    metadata: { templateCount: templates.length, assignmentCount: assignments.length },
+  });
 
   return NextResponse.json({ ok: true, revision: calendarRevision(savedTemplates, savedAssignments) });
 }

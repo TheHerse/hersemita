@@ -17,7 +17,6 @@ type RunnerRow = {
   grade: number | string | null;
   parent_phone: string | null;
   username: string | null;
-  access_code: string | null;
   groups: RunnerGroup[];
 };
 
@@ -34,7 +33,6 @@ export default function RosterWorkbench({
   const [grade, setGrade] = useState("all");
   const [groupId, setGroupId] = useState("all");
   const [sort, setSort] = useState<SortMode>("name");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const grades = useMemo(() => {
     return Array.from(new Set(runners.map((runner) => runner.grade).filter(Boolean).map(String))).sort((a, b) => Number(a) - Number(b));
@@ -44,7 +42,7 @@ export default function RosterWorkbench({
     const normalizedQuery = query.trim().toLowerCase();
     const rows = runners.filter((runner) => {
       const fullName = `${runner.first_name} ${runner.last_name}`.toLowerCase();
-      const credentials = `${runner.username || ""} ${runner.access_code || ""}`.toLowerCase();
+      const credentials = `${runner.username || ""}`.toLowerCase();
       const groupNames = runner.groups.map((group) => group.name.toLowerCase()).join(" ");
       const matchesQuery = !normalizedQuery || `${fullName} ${credentials} ${groupNames}`.includes(normalizedQuery);
       const matchesGrade = grade === "all" || String(runner.grade) === grade;
@@ -65,12 +63,6 @@ export default function RosterWorkbench({
     });
   }, [grade, groupId, query, runners, sort]);
 
-  async function copyCredentials(runner: RunnerRow) {
-    const text = `Runner portal: ${window.location.origin}/runner/login\nUsername: ${runner.username || ""}\nPasscode: ${runner.access_code || ""}`;
-    await navigator.clipboard.writeText(text);
-    setCopiedId(runner.id);
-    window.setTimeout(() => setCopiedId(null), 1800);
-  }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-2xl shadow-black/20 backdrop-blur">
@@ -129,7 +121,7 @@ export default function RosterWorkbench({
         <>
           <div className="space-y-4 p-4 md:hidden">
             {filteredRunners.map((runner) => (
-              <RunnerCard key={runner.id} runner={runner} copied={copiedId === runner.id} onCopy={() => copyCredentials(runner)} />
+              <RunnerCard key={runner.id} runner={runner} />
             ))}
           </div>
 
@@ -154,7 +146,7 @@ export default function RosterWorkbench({
                     <td className="px-6 py-4 text-[#cbd5e1]">{runner.grade ? `${runner.grade}th` : "--"}</td>
                     <td className="px-6 py-4"><GroupPills groups={runner.groups} /></td>
                     <td className="px-6 py-4">
-                      <CredentialCopyButton runner={runner} copied={copiedId === runner.id} onCopy={() => copyCredentials(runner)} />
+                      <CredentialStatus runner={runner} />
                     </td>
                     <td className="px-6 py-4">
                       <ActionButtons runner={runner} />
@@ -170,7 +162,7 @@ export default function RosterWorkbench({
   );
 }
 
-function RunnerCard({ runner, copied, onCopy }: { runner: RunnerRow; copied: boolean; onCopy: () => void }) {
+function RunnerCard({ runner }: { runner: RunnerRow }) {
   return (
     <div className="rounded-xl border border-white/10 bg-[#111827] p-4">
       <div className="flex items-start justify-between gap-3">
@@ -178,7 +170,7 @@ function RunnerCard({ runner, copied, onCopy }: { runner: RunnerRow; copied: boo
           <Link href={`/runners/${runner.id}`} className="font-bold text-white transition hover:text-[#7dd3fc]">{runner.first_name} {runner.last_name}</Link>
           <div className="mt-1 text-sm text-[#94a3b8]">Grade {runner.grade || "--"}</div>
         </div>
-        <CredentialCopyButton runner={runner} copied={copied} onCopy={onCopy} compact />
+        <CredentialStatus runner={runner} compact />
       </div>
       <div className="mt-4">
         <GroupPills groups={runner.groups} />
@@ -239,38 +231,21 @@ function ActionButtons({ runner }: { runner: RunnerRow }) {
   );
 }
 
-function CredentialCopyButton({
+function CredentialStatus({
   runner,
-  copied,
-  onCopy,
   compact = false,
 }: {
   runner: RunnerRow;
-  copied: boolean;
-  onCopy: () => void;
   compact?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onCopy}
-      title="Copy runner login"
-      className={`relative inline-flex max-w-full flex-col rounded-md border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-2 pr-16 text-left font-mono font-bold text-[#7dd3fc] transition hover:border-[#00a7ff] hover:bg-[#00a7ff]/15 ${compact ? "text-xs" : "text-sm"}`}
+    <Link
+      href={`/runners/${runner.id}/edit`}
+      title="Manage runner login"
+      className={`inline-flex max-w-full flex-col rounded-md border border-[#00a7ff]/30 bg-[#00a7ff]/10 px-3 py-2 text-left font-bold text-[#7dd3fc] transition hover:border-[#00a7ff] hover:bg-[#00a7ff]/15 ${compact ? "text-xs" : "text-sm"}`}
     >
-      <span className="truncate">{runner.username || "No username"}</span>
-      <span className="truncate">{runner.access_code || "No passcode"}</span>
-      <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded bg-[#0f172a]/80 text-white" aria-hidden="true">
-        {copied ? (
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
-            <path d="M4.5 10.5 8 14l7.5-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : (
-          <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
-            <rect x="7" y="5" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
-            <path d="M5 12.5V4.5A1.5 1.5 0 0 1 6.5 3h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
-        )}
-      </span>
-    </button>
+      <span className="truncate font-mono">{runner.username || "No username"}</span>
+      <span className="truncate text-[#cbd5e1]">Passcode hidden</span>
+    </Link>
   );
 }

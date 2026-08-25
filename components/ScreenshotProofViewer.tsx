@@ -3,26 +3,47 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
-export default function ScreenshotProofViewer({ urls }: { urls?: string[] | null }) {
+export default function ScreenshotProofViewer({ activityId, count }: { activityId: string; count: number }) {
   const [activeUrl, setActiveUrl] = useState<string | null>(null);
+  const [loadingIndex, setLoadingIndex] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
-  if (!urls || urls.length === 0) return null;
+  if (count <= 0) return null;
+
+  async function openScreenshot(index: number) {
+    setError("");
+    setLoadingIndex(index);
+    try {
+      const response = await fetch(`/api/activity-screenshots/${encodeURIComponent(activityId)}/${index}`, {
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null) as { url?: string; error?: string } | null;
+      if (!response.ok || !payload?.url) throw new Error(payload?.error || "Screenshot access failed");
+      setActiveUrl(payload.url);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Screenshot access failed");
+    } finally {
+      setLoadingIndex(null);
+    }
+  }
 
   return (
     <div className="mt-3 rounded-lg border border-slate-700 bg-[#0f172a] px-3 py-2">
-      <p className="text-sm font-semibold text-[#7dd3fc]">Screenshot proof ({urls.length})</p>
+      <p className="text-sm font-semibold text-[#7dd3fc]">Screenshot proof ({count})</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        {urls.map((url, index) => (
+        {Array.from({ length: count }, (_, index) => (
           <button
-            key={url}
+            key={index}
             type="button"
-            onClick={() => setActiveUrl(url)}
+            onClick={() => openScreenshot(index)}
+            disabled={loadingIndex !== null}
             className="rounded-lg border border-slate-600 bg-[#111827] px-3 py-2 text-xs font-bold text-white transition hover:border-[#00a7ff]"
           >
-            View screenshot {index + 1}
+            {loadingIndex === index ? "Opening..." : `View screenshot ${index + 1}`}
           </button>
         ))}
       </div>
+      {error && <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>}
 
       {activeUrl && createPortal(
         <div className="fixed inset-0 z-[9999] bg-black/95">

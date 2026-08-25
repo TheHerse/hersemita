@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const COOKIE_NAME = "hersemita_runner_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -7,11 +8,18 @@ const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 type RunnerSession = {
   runnerId: string;
   runnerName: string;
+  credentialVersion: number;
+  sessionVersion: number;
   exp: number;
 };
 
 function getSecret() {
-  return process.env.CLERK_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "dev-runner-session-secret";
+  const secret = process.env.RUNNER_SESSION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("RUNNER_SESSION_SECRET is required in production");
+  }
+  return "dev-only-runner-session-secret-change-me";
 }
 
 function toBase64Url(value: string) {
@@ -26,10 +34,17 @@ function sign(value: string) {
   return createHmac("sha256", getSecret()).update(value).digest("base64url");
 }
 
-export async function setRunnerSession(runnerId: string, runnerName: string) {
+export async function setRunnerSession(
+  runnerId: string,
+  runnerName: string,
+  credentialVersion: number,
+  sessionVersion: number
+) {
   const session: RunnerSession = {
     runnerId,
     runnerName,
+    credentialVersion,
+    sessionVersion,
     exp: Date.now() + MAX_AGE_SECONDS * 1000,
   };
   const payload = toBase64Url(JSON.stringify(session));
@@ -64,8 +79,31 @@ export async function getRunnerSession() {
 
   try {
     const session = JSON.parse(fromBase64Url(payload)) as RunnerSession;
-    if (!session.runnerId || !session.runnerName || session.exp < Date.now()) return null;
-    return session;
+    if (
+      !session.runnerId ||
+      !session.runnerName ||
+      !Number.isSafeInteger(session.credentialVersion) ||
+      !Number.isSafeInteger(session.sessionVersion) ||
+      session.exp < Date.now()
+    ) return null;
+
+    const { data: runner } = await supabaseAdmin
+      .from("runners")
+      .select("id, first_name, last_name, portal_status, credential_version, session_version")
+      .eq("id", session.runnerId)
+      .maybeSingle();
+
+    if (
+      !runner ||
+      runner.portal_status !== "active" ||
+      Number(runner.credential_version) !== session.credentialVersion ||
+      Number(runner.session_version) !== session.sessionVersion
+    ) return null;
+
+    return {
+      ...session,
+      runnerName: `${runner.first_name} ${runner.last_name}`.trim(),
+    };
   } catch {
     return null;
   }

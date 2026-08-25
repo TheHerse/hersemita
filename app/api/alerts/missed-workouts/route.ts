@@ -114,7 +114,8 @@ async function scanMissedWorkouts(request: Request) {
     supabaseAdmin
       .from("runners")
       .select("id, coach_id, team_id, first_name, last_name")
-      .in("team_id", teamIds),
+      .in("team_id", teamIds)
+      .is("archived_at", null),
     groupIds.length
       ? supabaseAdmin
           .from("runner_group_members")

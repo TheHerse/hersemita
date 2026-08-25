@@ -16,7 +16,6 @@ type RunnerRecord = {
   grade: number | null;
   parent_phone: string | null;
   username: string | null;
-  access_code: string | null;
 };
 
 type ActivityRecord = {
@@ -217,7 +216,7 @@ export default async function RunnerDetailPage({
   ] = await Promise.all([
     supabase
       .from("runners")
-      .select("id, first_name, last_name, grade, parent_phone, username, access_code")
+      .select("id, first_name, last_name, grade, parent_phone, username")
       .eq("id", runnerId)
       .eq("team_id", teamId)
       .single(),

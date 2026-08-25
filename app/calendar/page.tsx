@@ -30,6 +30,7 @@ export default async function CalendarPage() {
           .from("runners")
           .select("id, first_name, last_name, grade")
           .eq("team_id", teamId)
+          .is("archived_at", null)
           .order("last_name", { ascending: true }),
         supabase
           .from("runner_groups")

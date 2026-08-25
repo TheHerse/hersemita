@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { clearRunnerSession, getRunnerSession } from "@/lib/runner-session";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeDistanceUnit } from "@/lib/distance-units";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,10 @@ export async function GET() {
   });
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  if (!hasTrustedRequestOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
   await clearRunnerSession();
   return NextResponse.json({ ok: true });
 }

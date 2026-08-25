@@ -23,6 +23,7 @@ export default async function RunnersPage() {
     .from("runners")
     .select("*")
     .eq("team_id", teamContext?.team.id)
+    .is("archived_at", null)
     .order("first_name", { ascending: true })
     .order("last_name", { ascending: true });
 

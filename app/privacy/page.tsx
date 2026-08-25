@@ -46,12 +46,18 @@ export default function PrivacyPolicy() {
             </section>
 
             <section>
+              <h2 className="text-xl font-semibold text-slate-100 mb-3">Your Privacy Choices</h2>
+              <p>Authorized parents or guardians, adult runners, and coaches may request access, export, correction, restriction, or deletion through the secured request portal.</p>
+              <p className="mt-3"><Link href="/privacy/requests" className="text-[#7dd3fc] underline">Open the privacy request portal</Link>.</p>
+            </section>
+
+            <section>
               <h2 className="text-xl font-semibold text-slate-100 mb-3">Contact Us</h2>
               <p>Email: support@hersemita.com</p>
               <p>Location: Clarksville, TN</p>
             </section>
 
-            <p className="text-sm text-slate-500 mt-8 pt-8 border-t border-slate-700">Last updated: July 2026</p>
+            <p className="text-sm text-slate-500 mt-8 pt-8 border-t border-slate-700">Last updated: August 2026</p>
           </div>
         </div>
       </div>

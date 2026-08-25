@@ -4,13 +4,12 @@ import { distanceUnitLabel, milesToDistance, normalizeDistanceUnit, paceFromMile
 import { displayActivitySource } from "@/lib/display-text";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getCurrentTeamContext } from "@/lib/team-context";
+import { csvCell } from "@/lib/csv";
+import { logAuditEvent } from "@/lib/audit-log";
 
 export const dynamic = "force-dynamic";
 
-function csvCell(value: unknown) {
-  const text = value == null ? "" : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
-}
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function formatPace(seconds: number | null) {
   if (!seconds || seconds <= 0) return "";
@@ -39,7 +38,8 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const days = Number(url.searchParams.get("days") || "0");
+  const rawDays = Number(url.searchParams.get("days") || "0");
+  const days = Number.isInteger(rawDays) && rawDays >= 0 && rawDays <= 730 ? rawDays : null;
   const verifiedOnly = url.searchParams.get("verified") === "1";
   const runnerIds = new Set(
     (url.searchParams.get("runnerIds") || "")
@@ -47,6 +47,9 @@ export async function GET(request: Request) {
       .map((id) => id.trim())
       .filter(Boolean)
   );
+  if (days == null || runnerIds.size > 250 || Array.from(runnerIds).some((id) => !UUID_PATTERN.test(id))) {
+    return NextResponse.json({ error: "Invalid export filters" }, { status: 400 });
+  }
 
   const supabase = await createServerSupabaseClient();
   const teamContext = await getCurrentTeamContext(userId);
@@ -95,10 +98,12 @@ export async function GET(request: Request) {
         last_name,
         grade,
         username,
-        team_id
+        team_id,
+        archived_at
       )
     `)
     .eq("runners.team_id", teamId)
+    .is("runners.archived_at", null)
     .order("start_time", { ascending: false });
 
   if (verifiedOnly) {
@@ -109,7 +114,7 @@ export async function GET(request: Request) {
     query = query.in("runner_id", Array.from(runnerIds));
   }
 
-  if (Number.isFinite(days) && days > 0) {
+  if (days > 0) {
     const since = new Date();
     since.setDate(since.getDate() - days);
     query = query.gte("start_time", since.toISOString());
@@ -192,6 +197,12 @@ export async function GET(request: Request) {
   });
 
   const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+
+  await logAuditEvent({
+    teamId, actorCoachId: teamContext?.coach.id, actorClerkId: userId,
+    action: "activities.exported", entityType: "team", entityId: teamId,
+    metadata: { rowCount: rows.length, verifiedOnly, filteredRunnerCount: runnerIds.size, days },
+  });
 
   return new Response(csv, {
     headers: {

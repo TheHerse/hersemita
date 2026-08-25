@@ -94,6 +94,7 @@ async function sendMessage(formData: FormData) {
     .from("runners")
     .select("id, first_name, last_name, parent_phone")
     .eq("team_id", teamId)
+    .is("archived_at", null)
     .in("id", selectedRunners);
 
   const safeRunners = (runners || []) as RunnerMessageRow[];
@@ -184,6 +185,7 @@ export default async function MessageParentsPage({
         .from("runners")
         .select("id, first_name, last_name, grade, parent_phone")
         .eq("team_id", teamId)
+        .is("archived_at", null)
         .order("last_name", { ascending: true })
     : { data: [] };
 

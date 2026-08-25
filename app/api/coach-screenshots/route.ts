@@ -4,11 +4,18 @@ import { compressScreenshot } from "@/lib/image-compression";
 import { checkRateLimit, clientIpFromHeaders, rateLimitKey } from "@/lib/rate-limit";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getCurrentTeamContext } from "@/lib/team-context";
+import { activityScreenshotReference } from "@/lib/activity-screenshot-storage";
+import { hasTrustedRequestOrigin } from "@/lib/request-origin";
+import { logSecurityEvent, securityReference } from "@/lib/security-events";
 
 const UPLOAD_WINDOW_MS = 60 * 60 * 1000;
 const MAX_UPLOAD_REQUESTS = 30;
 
 export async function POST(request: Request) {
+  if (!hasTrustedRequestOrigin(request)) {
+    await logSecurityEvent({ actorType: "anonymous", actorReference: securityReference(clientIpFromHeaders(request.headers)), eventType: "origin.rejected", severity: "high", route: "/api/coach-screenshots", outcome: "blocked" });
+    return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
+  }
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Coach authentication required" }, { status: 401 });
@@ -27,6 +34,7 @@ export async function POST(request: Request) {
   });
 
   if (limit.limited) {
+    await logSecurityEvent({ teamId, actorType: "coach", actorReference: securityReference(userId), eventType: "upload.rate_limited", severity: "high", route: "/api/coach-screenshots", outcome: "blocked" });
     return NextResponse.json({ error: "Too many uploads. Try again later." }, { status: 429 });
   }
 
@@ -43,9 +51,11 @@ export async function POST(request: Request) {
     .select("id")
     .eq("id", runnerId)
     .eq("team_id", teamId)
+    .is("archived_at", null)
     .maybeSingle();
 
   if (!runner?.id) {
+    await logSecurityEvent({ teamId, actorType: "coach", actorReference: securityReference(userId), eventType: "authorization.denied", severity: "high", route: "/api/coach-screenshots", outcome: "runner_not_in_team" });
     return NextResponse.json({ error: "Runner not found for this team" }, { status: 404 });
   }
 
@@ -54,6 +64,7 @@ export async function POST(request: Request) {
   try {
     compressed = await compressScreenshot(file);
   } catch (error) {
+    await logSecurityEvent({ teamId, actorType: "coach", actorReference: securityReference(userId), eventType: "upload.rejected", severity: "warning", route: "/api/coach-screenshots", outcome: "invalid_file" });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "This screenshot format could not be processed." },
       { status: 400 }
@@ -74,10 +85,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { data } = supabaseAdmin.storage.from("activity-screenshots").getPublicUrl(fileName);
+  await logSecurityEvent({ teamId, actorType: "coach", actorReference: securityReference(userId), eventType: "upload.accepted", severity: "info", route: "/api/coach-screenshots", outcome: "stored" });
 
   return NextResponse.json({
-    url: data.publicUrl,
+    url: activityScreenshotReference(fileName),
     originalSize: compressed.originalSize,
     storedSize: compressed.compressedSize,
   });

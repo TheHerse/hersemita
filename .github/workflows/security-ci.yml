@@ -1,0 +1,51 @@
+name: Security CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_APP_URL: https://www.hersemita.com
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2ktcGxhY2Vob2xkZXIk
+      CLERK_SECRET_KEY: sk_test_Y2ktcGxhY2Vob2xkZXIk # ci-placeholder
+      RUNNER_SESSION_SECRET: ci-runner-session-secret-at-least-32-characters
+      RUNNER_CREDENTIAL_REVEAL_SECRET: ci-runner-reveal-secret-at-least-32-characters
+      PARENT_CONSENT_VERSION: ci-parent-consent-v1
+      ADULT_CONSENT_VERSION: ci-adult-consent-v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run security:secrets
+      - run: npm run security:audit
+      - run: npm run test:security
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - name: Generate CycloneDX SBOM
+        run: npm run security:sbom -- > hersemita-sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hersemita-sbom
+          path: hersemita-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30

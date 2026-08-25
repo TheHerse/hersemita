@@ -554,6 +554,20 @@ export default async function CoachSettingsPage({
           </p>
         </div>
 
+        {teamContext?.role === "head_coach" && (
+          <div className="mb-6 grid gap-3 sm:grid-cols-3">
+            <Link href="/settings/privacy-requests" className="block rounded-xl border border-sky-400/30 bg-sky-500/10 p-4 transition hover:bg-sky-500/15">
+              <p className="font-black">Privacy request processing</p><p className="mt-1 text-sm text-slate-200">Review access, export, correction, restriction, and deletion requests.</p>
+            </Link>
+            <Link href="/settings/season-closeout" className="block rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 transition hover:bg-amber-500/15">
+              <p className="font-black">End-of-season closeout</p><p className="mt-1 text-sm text-slate-200">Suspend runner access, archive the roster, and manage approved cleanup.</p>
+            </Link>
+            <Link href="/settings/security-monitoring" className="block rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 transition hover:bg-rose-500/15">
+              <p className="font-black">Security monitoring</p><p className="mt-1 text-sm text-slate-200">Review suspicious activity thresholds and incident alerts.</p>
+            </Link>
+          </div>
+        )}
+
         {(error || params?.error) && (
           <div className="mb-6 rounded-xl border border-orange-400/30 bg-orange-400/10 p-4 text-sm text-orange-100">
             {params?.error || "Coach profile fields are not set up yet. Run supabase/coach-profile-fields.sql in Supabase SQL Editor, then refresh."}

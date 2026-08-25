@@ -188,9 +188,14 @@ export default async function ParentRunnerDetailPage({
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/10 p-5 text-white shadow-2xl shadow-black/10 backdrop-blur sm:p-6">
-          <Link href="/parent/dashboard" className="mb-4 inline-flex rounded-lg border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/15">
-            Back to dashboard
-          </Link>
+          <div className="mb-4 flex flex-wrap gap-3">
+            <Link href="/parent/dashboard" className="inline-flex rounded-lg border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/15">
+              Back to dashboard
+            </Link>
+            <Link href={`/parent/consent/${runner.id}/withdraw`} className="inline-flex rounded-lg border border-red-300/40 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-100 transition hover:bg-red-500/20">
+              Withdraw runner authorization
+            </Link>
+          </div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#00a7ff]">{team?.school_name || team?.name || "Team"}</p>
           <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{runnerName(runner)}</h1>
           <p className="mt-2 text-[#cbd5e1]">Grade {runner.grade ?? "--"} / verified training updates only</p>

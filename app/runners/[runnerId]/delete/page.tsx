@@ -6,8 +6,9 @@ import { logAuditEvent } from "@/lib/audit-log";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import CoachHeader from "@/components/CoachHeader";
 import { getCurrentTeamContext } from "@/lib/team-context";
+import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
 
-async function deleteRunner(runnerId: string) {
+async function deleteRunner(runnerId: string, expectedConfirmation: string, formData: FormData) {
   "use server";
 
   const { userId } = await auth();
@@ -17,7 +18,17 @@ async function deleteRunner(runnerId: string) {
   const teamContext = await getCurrentTeamContext(userId);
   const teamId = teamContext?.team.id;
 
-  if (!teamId) redirect("/runners");
+  if (!teamId || teamContext?.role !== "head_coach") redirect("/runners");
+  const confirmation = String(formData.get("confirmation") || "").trim();
+  if (confirmation !== expectedConfirmation) {
+    redirect(`/runners/${runnerId}/delete?error=Confirmation%20did%20not%20match.`);
+  }
+  const limit = await checkRateLimit({
+    key: rateLimitKey(["runner-delete", teamId, userId]),
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+  });
+  if (limit.limited) redirect("/runners?error=Too%20many%20deletion%20attempts.%20Try%20again%20later.");
 
   const { data: runner } = await supabase
     .from("runners")
@@ -66,8 +77,10 @@ async function deleteRunner(runnerId: string) {
 
 export default async function DeleteRunnerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ runnerId: string }>;
+  searchParams?: Promise<{ error?: string }>;
 }) {
   const { userId } = await auth();
   if (!userId) redirect("/");
@@ -78,16 +91,18 @@ export default async function DeleteRunnerPage({
   const teamContext = await getCurrentTeamContext(userId);
   const teamId = teamContext?.team.id;
 
-  if (!teamId) redirect("/runners");
+  if (!teamId || teamContext?.role !== "head_coach") redirect("/runners");
+  const query = await searchParams;
 
   const { data: runner } = await supabase
     .from("runners")
-    .select("id, first_name, last_name, grade, parent_phone, access_code, username")
+    .select("id, first_name, last_name, grade, parent_phone, username")
     .eq("id", runnerId)
     .eq("team_id", teamId)
     .single();
 
   if (!runner) redirect("/runners");
+  const confirmationText = `DELETE ${runner.username || runner.id}`;
 
   const { count: activityCount } = await supabase
     .from("activities")
@@ -118,15 +133,17 @@ export default async function DeleteRunnerPage({
               <div className="mt-4 grid gap-3 text-sm text-[#cbd5e1] sm:grid-cols-2">
                 <p>Grade: {runner.grade}th</p>
                 <p>Username: {runner.username || "Not set"}</p>
-                <p>Passcode: {runner.access_code}</p>
+                <p>Passcode: securely hashed</p>
                 <p>Parent phone: {runner.parent_phone || "Not set"}</p>
                 <p>Activities: {activityCount || 0}</p>
               </div>
             </div>
 
             <div className="rounded-xl border border-orange-400/30 bg-orange-400/10 p-4 text-sm text-orange-200">
-              Deleting test runners is fine, but this action cannot be undone from the app.
+              This action cannot be undone from the app. Type <strong>{confirmationText}</strong> to confirm.
             </div>
+
+            {query?.error && <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{query.error}</div>}
 
             <div className="flex flex-col sm:flex-row gap-3">
               <Link
@@ -135,7 +152,15 @@ export default async function DeleteRunnerPage({
               >
                 Cancel
               </Link>
-              <form action={deleteRunner.bind(null, runner.id)} className="flex-1">
+              <form action={deleteRunner.bind(null, runner.id, confirmationText)} className="flex-1 space-y-3">
+                <input
+                  name="confirmation"
+                  required
+                  autoComplete="off"
+                  aria-label="Deletion confirmation"
+                  className="w-full rounded-lg border border-red-400/40 bg-slate-950 px-3 py-3 text-white"
+                  placeholder={confirmationText}
+                />
                 <button
                   type="submit"
                   className="w-full rounded-lg bg-red-600 px-4 py-3 font-bold text-white transition-colors hover:bg-red-700"

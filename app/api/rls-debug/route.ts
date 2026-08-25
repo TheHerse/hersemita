@@ -18,6 +18,10 @@ function decodeJwtPayload(token: string | null) {
 }
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { userId, getToken } = await auth();
 
   if (!userId) {
