@@ -71,6 +71,18 @@ test("security-definer pseudonymization resolves pgcrypto from its trusted schem
   assert.match(seasonSql, /set search_path = pg_catalog, extensions, public/);
 });
 
+test("season reopen restores roster only behind fresh consent and credentials", async () => {
+  const sql = await readFile(new URL("../../supabase/season-closeout-reopen.sql", import.meta.url), "utf8");
+  assert.match(sql, /status not in \('closed', 'cleanup_ready'\)/);
+  assert.match(sql, /pending_adult_consent/);
+  assert.match(sql, /pending_parent_consent/);
+  assert.match(sql, /access_code = null/);
+  assert.match(sql, /access_code_hash = null/);
+  assert.match(sql, /credential_version = coalesce\(r\.credential_version, 1\) \+ 1/);
+  assert.match(sql, /session_version = coalesce\(r\.session_version, 1\) \+ 1/);
+  assert.match(sql, /status = 'canceled'/);
+});
+
 test("parent consent requires every independently named choice", () => {
   const form = new FormData();
   REQUIRED_PARENT_CONSENT_KEYS.forEach((key) => form.set(key, "on"));

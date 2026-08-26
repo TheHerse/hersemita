@@ -82,6 +82,31 @@ async function completeCleanup(closeoutId: string, expectedConfirmation: string,
   redirect("/settings/season-closeout?cleaned=1");
 }
 
+async function reopenSeason(closeoutId: string, expectedConfirmation: string, formData: FormData) {
+  "use server";
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") redirect("/settings");
+  if (String(formData.get("confirmation") || "").trim() !== expectedConfirmation) {
+    redirect("/settings/season-closeout?error=Reopen%20confirmation%20did%20not%20match.");
+  }
+  const limit = await checkRateLimit({ key: rateLimitKey(["season-reopen", context.team.id, userId]), windowMs: 24 * 60 * 60 * 1000, max: 2 });
+  if (limit.limited) redirect("/settings/season-closeout?error=Season%20reopen%20limit%20reached.");
+  const { data: restoredCount, error } = await supabaseAdmin.rpc("reopen_team_season", {
+    p_closeout_id: closeoutId,
+    p_team_id: context.team.id,
+    p_actor_clerk_id: userId,
+  });
+  if (error) redirect("/settings/season-closeout?error=Season%20could%20not%20be%20reopened.");
+  await logAuditEvent({
+    teamId: context.team.id, actorCoachId: context.coach.id, actorClerkId: userId,
+    action: "season.reopened", entityType: "season_closeout", entityId: closeoutId,
+    metadata: { restoredRunnerCount: Number(restoredCount || 0), consentRequired: true },
+  });
+  redirect("/settings/season-closeout?reopened=1");
+}
+
 async function updateCloseoutControls(closeoutId: string, formData: FormData) {
   "use server";
   const { userId } = await auth();
@@ -104,7 +129,7 @@ async function updateCloseoutControls(closeoutId: string, formData: FormData) {
   redirect("/settings/season-closeout?controls=1");
 }
 
-export default async function SeasonCloseoutPage({ searchParams }: { searchParams?: Promise<{ closed?: string; cleaned?: string; controls?: string; error?: string }> }) {
+export default async function SeasonCloseoutPage({ searchParams }: { searchParams?: Promise<{ closed?: string; cleaned?: string; controls?: string; reopened?: string; error?: string }> }) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
   const context = await getCurrentTeamContext(userId);
@@ -121,7 +146,7 @@ export default async function SeasonCloseoutPage({ searchParams }: { searchParam
     <div><Link href="/settings" className="text-sm font-bold text-sky-300">Back to settings</Link><h1 className="mt-3 text-3xl font-black">End-of-season closeout</h1>
       <p className="mt-2 text-slate-300">Closing suspends runner access and archives the current roster. It does not delete records until an approved retention date has passed.</p></div>
     {query?.error && <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-4">{query.error}</p>}
-    {(query?.closed || query?.cleaned || query?.controls) && <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">{query.cleaned ? "Eligible archived data was cleaned up." : query.controls ? "Retention controls updated and logged." : "Season closed and runner access revoked."}</p>}
+    {(query?.closed || query?.cleaned || query?.controls || query?.reopened) && <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">{query.cleaned ? "Eligible archived data was cleaned up." : query.reopened ? "Season reopened. Runners require fresh consent and credentials." : query.controls ? "Retention controls updated and logged." : "Season closed and runner access revoked."}</p>}
     {error && <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">Season closeout migration is not ready.</p>}
 
     <section className="rounded-2xl border border-white/10 bg-white/5 p-5"><h2 className="text-xl font-black">Current inventory</h2>
@@ -138,8 +163,11 @@ export default async function SeasonCloseoutPage({ searchParams }: { searchParam
     <section className="space-y-4"><h2 className="text-xl font-black">Closeout history</h2>{(closeouts || []).map((closeout) => {
       const eligible = !closeout.legal_hold && closeout.retention_until && closeout.retention_until <= new Date().toISOString().slice(0, 10) && ["closed", "cleanup_ready"].includes(closeout.status);
       const cleanupConfirmation = `DELETE SEASON ${closeout.id.slice(0, 8)}`;
+      const reopenConfirmation = `REOPEN SEASON ${closeout.id.slice(0, 8)}`;
+      const reversible = ["closed", "cleanup_ready"].includes(closeout.status);
       return <article key={closeout.id} className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="font-black">{closeout.season_label}</p><p className="mt-1 text-sm text-slate-300">Status: {closeout.status} · Retain until: {closeout.retention_until || "not approved"} · Legal hold: {closeout.legal_hold ? "yes" : "no"}</p>
-        {closeout.status !== "completed" && <form action={updateCloseoutControls.bind(null, closeout.id)} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]"><input name="retentionUntil" type="date" defaultValue={closeout.retention_until || ""} className="rounded-lg bg-slate-900 p-3" /><label className="flex items-center gap-2 rounded-lg bg-slate-900 px-3"><input name="legalHold" type="checkbox" defaultChecked={closeout.legal_hold} /> Legal hold</label><button className="rounded-lg border border-sky-400/40 px-4 py-3 font-bold text-sky-200">Save controls</button></form>}
+        {reversible && <form action={updateCloseoutControls.bind(null, closeout.id)} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]"><input name="retentionUntil" type="date" defaultValue={closeout.retention_until || ""} className="rounded-lg bg-slate-900 p-3" /><label className="flex items-center gap-2 rounded-lg bg-slate-900 px-3"><input name="legalHold" type="checkbox" defaultChecked={closeout.legal_hold} /> Legal hold</label><button className="rounded-lg border border-sky-400/40 px-4 py-3 font-bold text-sky-200">Save controls</button></form>}
+        {reversible && <form action={reopenSeason.bind(null, closeout.id, reopenConfirmation)} className="mt-4 space-y-3 rounded-lg border border-amber-300/30 bg-amber-400/10 p-4"><p className="text-sm">Reopen before permanent cleanup. Runners return in a locked state and require fresh consent and credentials. Type <strong>{reopenConfirmation}</strong>.</p><input name="confirmation" required autoComplete="off" className="w-full rounded-lg bg-slate-950 p-3" placeholder={reopenConfirmation} /><button className="rounded-lg bg-amber-400 px-4 py-3 font-black text-slate-950">Reopen season with runners locked</button></form>}
         {eligible && <form action={completeCleanup.bind(null, closeout.id, cleanupConfirmation)} className="mt-4 space-y-3 rounded-lg border border-red-400/30 bg-red-500/10 p-4"><p className="text-sm">Permanent cleanup is eligible. Type <strong>{cleanupConfirmation}</strong>.</p><input name="confirmation" required className="w-full rounded-lg bg-slate-950 p-3" placeholder={cleanupConfirmation} /><button className="rounded-lg bg-red-600 px-4 py-3 font-black">Permanently clean archived season</button></form>}
       </article>;
     })}</section>
