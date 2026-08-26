@@ -31,6 +31,7 @@ yarn-error.log*
 .pnpm-debug.log*
 dev-server*.log
 .local-log-backup/
+supabase/.temp/
 
 # local architecture/security notes
 docs/supabase-architecture-audit.md
