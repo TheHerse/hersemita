@@ -154,5 +154,6 @@ $$;
 
 revoke all on function public.cleanup_rate_limits(integer) from public;
 revoke all on function public.cleanup_rate_limits(integer) from anon, authenticated;
+grant execute on function public.cleanup_rate_limits(integer) to service_role;
 
 commit;

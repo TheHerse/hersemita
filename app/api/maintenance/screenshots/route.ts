@@ -25,8 +25,8 @@ export async function GET(request: Request) {
     dryRun,
   });
 
-  return NextResponse.json({
-    ok: true,
-    ...result,
-  });
+  return NextResponse.json(
+    { ok: true, ...result },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }

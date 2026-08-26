@@ -24,8 +24,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    deleted: Number(data || 0),
-  });
+  return NextResponse.json(
+    { ok: true, deleted: Number(data || 0) },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
