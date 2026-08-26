@@ -122,7 +122,7 @@ export default async function PrivacyRequestAdminPage({ searchParams }: { search
   const query = await searchParams;
   const { data: requests, error } = await supabaseAdmin
     .from("privacy_requests")
-    .select("id, runner_id, requester_role, request_type, details, status, submitted_at, due_at, runners(first_name,last_name,username)")
+    .select("id, runner_id, requester_role, request_type, details, status, submitted_at, due_at, runners!privacy_requests_runner_id_fkey(first_name,last_name,username)")
     .eq("team_id", context.team.id)
     .order("submitted_at", { ascending: true })
     .limit(200);

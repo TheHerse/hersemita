@@ -99,6 +99,8 @@ test("privacy restriction revokes access and blocks new ingestion", async () => 
     const source = await readFile(new URL(path, import.meta.url), "utf8");
     assert.match(source, /\.eq\("portal_status", "active"\)/);
   }
+  const admin = await readFile(new URL("../../app/settings/privacy-requests/page.tsx", import.meta.url), "utf8");
+  assert.match(admin, /runners!privacy_requests_runner_id_fkey/);
 });
 
 test("parent consent requires every independently named choice", () => {
