@@ -45,7 +45,7 @@ create or replace function public.close_team_season(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, extensions, public
 as $$
 declare
   closeout_id uuid;

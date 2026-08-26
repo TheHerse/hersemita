@@ -24,8 +24,10 @@ test("runner access-code vault encryption is authenticated and bound to one runn
   assert.equal(encrypted.includes(code), false);
   assert.equal(decryptRunnerAccessCode(runnerId, encrypted), code);
   assert.equal(decryptRunnerAccessCode("22222222-2222-4222-8222-222222222222", encrypted), null);
-  const replacement = encrypted.endsWith("A") ? "B" : "A";
-  assert.equal(decryptRunnerAccessCode(runnerId, `${encrypted.slice(0, -1)}${replacement}`), null);
+  const parts = encrypted.split(":");
+  const replacement = parts[2].startsWith("A") ? "B" : "A";
+  parts[2] = `${replacement}${parts[2].slice(1)}`;
+  assert.equal(decryptRunnerAccessCode(runnerId, parts.join(":")), null);
   assert.equal(decryptRunnerAccessCode(runnerId, code), null);
 });
 
@@ -60,6 +62,13 @@ test("withdrawn minors remain available for authorized guardian privacy requests
   assert.match(source, /guardianIds/);
   assert.doesNotMatch(source, /portal_status.*active/);
   assert.match(source, /adult_18_plus.*adult_parent_access_enabled/);
+});
+
+test("security-definer pseudonymization resolves pgcrypto from its trusted schema", async () => {
+  const privacySql = await readFile(new URL("../../supabase/privacy-requests.sql", import.meta.url), "utf8");
+  const seasonSql = await readFile(new URL("../../supabase/season-closeout.sql", import.meta.url), "utf8");
+  assert.match(privacySql, /set search_path = pg_catalog, extensions, public/);
+  assert.match(seasonSql, /set search_path = pg_catalog, extensions, public/);
 });
 
 test("parent consent requires every independently named choice", () => {
