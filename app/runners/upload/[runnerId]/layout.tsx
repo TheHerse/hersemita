@@ -21,6 +21,7 @@ export default async function CoachRunnerUploadLayout({
     .select("id")
     .eq("id", runnerId)
     .eq("team_id", context.team.id)
+    .eq("portal_status", "active")
     .is("archived_at", null)
     .maybeSingle();
 

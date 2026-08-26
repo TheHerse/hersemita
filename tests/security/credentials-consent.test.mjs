@@ -83,6 +83,24 @@ test("season reopen restores roster only behind fresh consent and credentials", 
   assert.match(sql, /status = 'canceled'/);
 });
 
+test("privacy restriction revokes access and blocks new ingestion", async () => {
+  const sql = await readFile(new URL("../../supabase/privacy-processing-restrictions.sql", import.meta.url), "utf8");
+  assert.match(sql, /portal_status = 'suspended'/);
+  assert.match(sql, /access_code = null/);
+  assert.match(sql, /access_code_hash = null/);
+  assert.match(sql, /processing_restricted_at = now\(\)/);
+  assert.match(sql, /event_type.*processing_restricted/s);
+  for (const path of [
+    "../../app/api/coach-activities/route.ts",
+    "../../app/api/coach-screenshots/route.ts",
+    "../../app/runners/upload/[runnerId]/layout.tsx",
+    "../../app/api/alerts/missed-workouts/route.ts",
+  ]) {
+    const source = await readFile(new URL(path, import.meta.url), "utf8");
+    assert.match(source, /\.eq\("portal_status", "active"\)/);
+  }
+});
+
 test("parent consent requires every independently named choice", () => {
   const form = new FormData();
   REQUIRED_PARENT_CONSENT_KEYS.forEach((key) => form.set(key, "on"));

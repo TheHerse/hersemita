@@ -87,9 +87,34 @@ async function completeDeletion(requestId: string, expectedConfirmation: string,
   redirect("/settings/privacy-requests?deleted=1");
 }
 
+async function applyRestriction(requestId: string, expectedConfirmation: string, formData: FormData) {
+  "use server";
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
+  const context = await getCurrentTeamContext(userId);
+  if (!context || context.role !== "head_coach") redirect("/settings");
+  if (String(formData.get("confirmation") || "").trim() !== expectedConfirmation) {
+    redirect("/settings/privacy-requests?error=Restriction%20confirmation%20did%20not%20match.");
+  }
+  const note = String(formData.get("note") || "").trim();
+  if (note.length < 5 || note.length > 2000) redirect("/settings/privacy-requests?error=Restriction%20evidence%20is%20required.");
+  const limit = await checkRateLimit({ key: rateLimitKey(["privacy-restrict", context.team.id, userId]), windowMs: 24 * 60 * 60 * 1000, max: 10 });
+  if (limit.limited) redirect("/settings/privacy-requests?error=Restriction%20limit%20reached.");
+  const { data: runnerId, error } = await supabaseAdmin.rpc("apply_privacy_restriction", {
+    p_request_id: requestId, p_team_id: context.team.id, p_actor_clerk_id: userId, p_note: note,
+  });
+  if (error || !runnerId) redirect("/settings/privacy-requests?error=Processing%20restriction%20could%20not%20be%20applied.");
+  await logAuditEvent({
+    teamId: context.team.id, actorCoachId: context.coach.id, actorClerkId: userId,
+    action: "privacy.processing_restricted", entityType: "privacy_request", entityId: requestId,
+    metadata: { runnerId },
+  });
+  redirect("/settings/privacy-requests?restricted=1");
+}
+
 type RunnerJoin = { first_name?: string; last_name?: string; username?: string };
 
-export default async function PrivacyRequestAdminPage({ searchParams }: { searchParams?: Promise<{ saved?: string; deleted?: string; error?: string }> }) {
+export default async function PrivacyRequestAdminPage({ searchParams }: { searchParams?: Promise<{ saved?: string; deleted?: string; restricted?: string; error?: string }> }) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
   const context = await getCurrentTeamContext(userId);
@@ -109,13 +134,14 @@ export default async function PrivacyRequestAdminPage({ searchParams }: { search
         <p className="mt-2 text-slate-300">Verify identity and authority before approving. Complete correction or access work before marking it completed.</p>
       </div>
       {(error || query?.error) && <p className="rounded-xl border border-red-400/30 bg-red-500/10 p-4">{query?.error || "Privacy request migration is not ready."}</p>}
-      {(query?.saved || query?.deleted) && <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">{query.deleted ? "Deletion completed and recorded." : "Request updated."}</p>}
+      {(query?.saved || query?.deleted || query?.restricted) && <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4">{query.deleted ? "Deletion completed and recorded." : query.restricted ? "Processing restriction applied and runner access revoked." : "Request updated."}</p>}
 
       <section className="space-y-4">
         {(requests || []).length === 0 ? <p className="text-slate-400">No privacy requests.</p> : (requests || []).map((request) => {
           const joined = (Array.isArray(request.runners) ? request.runners[0] : request.runners) as RunnerJoin | null;
           const name = joined ? `${joined.first_name || ""} ${joined.last_name || ""}`.trim() : "Deleted runner";
           const deletionConfirmation = `DELETE REQUEST ${request.id.slice(0, 8)}`;
+          const restrictionConfirmation = `RESTRICT REQUEST ${request.id.slice(0, 8)}`;
           const terminal = ["completed", "denied", "canceled"].includes(request.status);
           return <article key={request.id} className="rounded-2xl border border-white/10 bg-white/5 p-5">
             <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-lg font-black">{name} — {request.request_type}</h2>
@@ -124,7 +150,7 @@ export default async function PrivacyRequestAdminPage({ searchParams }: { search
             </div>
             {request.details && <p className="mt-4 whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-sm">{request.details}</p>}
             {!terminal && <form action={transitionRequest.bind(null, request.id)} className="mt-4 grid gap-3 sm:grid-cols-[180px_1fr_auto]">
-              <select name="status" className="rounded-lg bg-slate-900 p-3"><option value="in_review">In review</option><option value="identity_verification">Verify identity</option><option value="approved">Approved</option>{request.request_type !== "deletion" && <option value="completed">Completed</option>}<option value="denied">Denied</option><option value="canceled">Canceled</option></select>
+              <select name="status" className="rounded-lg bg-slate-900 p-3"><option value="in_review">In review</option><option value="identity_verification">Verify identity</option><option value="approved">Approved</option>{!["deletion", "restriction"].includes(request.request_type) && <option value="completed">Completed</option>}<option value="denied">Denied</option><option value="canceled">Canceled</option></select>
               <input name="note" maxLength={2000} className="rounded-lg bg-slate-900 p-3" placeholder="Internal processing note" />
               <button className="rounded-lg bg-sky-500 px-4 py-3 font-black text-slate-950">Update</button>
             </form>}
@@ -133,6 +159,12 @@ export default async function PrivacyRequestAdminPage({ searchParams }: { search
               <input name="confirmation" required autoComplete="off" className="w-full rounded-lg bg-slate-950 p-3" placeholder={deletionConfirmation} />
               <input name="note" maxLength={2000} className="w-full rounded-lg bg-slate-950 p-3" placeholder="Completion evidence or reason" />
               <button className="rounded-lg bg-red-600 px-4 py-3 font-black">Permanently delete runner data</button>
+            </form>}
+            {request.request_type === "restriction" && request.runner_id && ["in_review", "approved"].includes(request.status) && <form action={applyRestriction.bind(null, request.id, restrictionConfirmation)} className="mt-4 space-y-3 rounded-xl border border-amber-300/30 bg-amber-400/10 p-4">
+              <p className="text-sm">After verifying identity, authority, and scope, type <strong>{restrictionConfirmation}</strong>. This suspends portal access, revokes credentials, and blocks new runner activity ingestion.</p>
+              <input name="confirmation" required autoComplete="off" className="w-full rounded-lg bg-slate-950 p-3" placeholder={restrictionConfirmation} />
+              <input name="note" required minLength={5} maxLength={2000} className="w-full rounded-lg bg-slate-950 p-3" placeholder="Restriction scope and verification evidence" />
+              <button className="rounded-lg bg-amber-400 px-4 py-3 font-black text-slate-950">Apply processing restriction</button>
             </form>}
           </article>;
         })}

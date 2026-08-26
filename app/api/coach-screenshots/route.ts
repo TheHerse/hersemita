@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     .select("id")
     .eq("id", runnerId)
     .eq("team_id", teamId)
+    .eq("portal_status", "active")
     .is("archived_at", null)
     .maybeSingle();
 
