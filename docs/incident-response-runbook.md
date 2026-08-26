@@ -89,3 +89,34 @@ Status: Engineering draft; legal contacts and notification matrix pending
 - Clerk, Supabase, Vercel and Twilio security contacts
 - Approved breach-notification decision matrix
 - Independent forensic support contact
+
+## Incident record template
+
+- Incident ID:
+- UTC discovery time:
+- Reporter and incident lead:
+- Severity and current status:
+- Systems, teams and runner records potentially affected:
+- Categories of data potentially affected:
+- Earliest/latest possible exposure:
+- Evidence preserved and storage location:
+- Containment actions with UTC timestamps:
+- Secrets/sessions revoked or rotated:
+- Counsel, insurer, school and provider contacts made:
+- Notification decision, authority and deadline:
+- Recovery validation performed:
+- Root cause and permanent corrective actions:
+- Post-incident owner and due date:
+
+## Pre-pilot tabletop exercise
+
+Use fake identifiers only. Scenario: a coach reports that a runner screenshot URL opened for the wrong team, and security monitoring shows repeated authorization failures from the same source.
+
+1. Record the discovery time, assign severity and name the incident lead.
+2. Identify the route, storage object, affected fake runners/teams and relevant logs without copying student content into chat or email.
+3. Explain the exact containment actions: disable viewing if needed, preserve evidence, revoke sessions, and keep the bucket private.
+4. Identify which contacts would be called and who decides whether legal or contractual notice is required.
+5. Demonstrate the authorization and storage tests required before restoration.
+6. Complete the incident template, including timestamps, gaps, corrective actions and owners.
+
+Passing evidence: a dated record showing the exercise participants, decisions, elapsed times, missing contacts, remediation owners and a scheduled retest. Do not mark the tabletop complete merely because this written scenario exists.

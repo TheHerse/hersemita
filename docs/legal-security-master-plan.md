@@ -3,25 +3,25 @@
 Status: Draft implementation roadmap  
 Primary launch market: Texas high-school teams  
 Business location: Tennessee  
-Last updated: August 19, 2026
+Last updated: August 26, 2026
 
 ## Implementation status
 
-Last implementation review: August 24, 2026
+Last implementation review: August 26, 2026
 
-- Implemented in code, pending production migration: private activity screenshot references, authorized short-lived signed URL delivery, and removal of new public screenshot URLs.
-- Implemented in code, pending production migration and secrets: scrypt-hashed runner passcodes, one-time encrypted coach reveal, legacy plaintext upgrade-on-login, dedicated runner session secret, versioned session revocation, and per-request portal-status/version revalidation.
+- Implemented and production-verified with fake data: private activity screenshot references, authorized short-lived signed URL delivery, and removal of public screenshot access.
+- Implemented and production-verified with fake data: scrypt-hashed runner passcodes, password-gated encrypted coach reveal, dedicated runner session secret, versioned session revocation, and per-request portal-status/version revalidation.
 - Added deployment migrations: `supabase/private-activity-screenshots.sql` and `supabase/runner-credential-session-hardening.sql`.
-- Verification completed: ESLint, TypeScript, all local security tests, secret scanning, dependency auditing, and the full Next.js production build pass.
+- Verification completed: ESLint, TypeScript, 21 local security tests, secret scanning, dependency auditing, and the full Next.js production build pass.
 - Implemented in code, pending migration and counsel-approved version configuration: new runners are created in `pending_parent_consent`, cannot receive credentials or use runner APIs, linked verified guardians receive a separate-checkbox consent screen, and activation plus immutable consent evidence is performed atomically by a restricted database function.
 - Parent consent production safeguard: the consent route refuses to run in production unless `PARENT_CONSENT_VERSION` identifies a non-draft, counsel-approved document version.
 - Implemented in code, pending migration: parent withdrawal records an immutable event, revokes the runner, erases the passcode hash, and invalidates every session immediately.
 - Implemented in code: JPEG/PNG allowlisting, magic-byte verification, 8 MB compressed limit, 25-megapixel decoded limit, animation/multi-page rejection, three-file request limit, strict Sharp decoding, metadata-stripping JPEG re-encoding, and a ten-second processing timeout.
 - Implemented in code: baseline HSTS, frame denial, MIME sniffing protection, referrer and browser-permission headers; `/api/rls-debug` returns 404 in production.
-- Still required before Gate A closes: final counsel-approved wording, live migration/RLS verification, authenticated end-to-end role tests, production monitoring, and external operational/legal actions.
+- Still required before Gate A closes: final counsel-approved wording, backup/restore verification, monitoring-alert exercise, incident tabletop, independent penetration testing, and external operational/legal actions.
 - Implemented in code, pending migrations and approved document version: minimized age-status attestation without birth dates, under-13 enrollment rejection, adult-transition credential revocation, verified-email adult self-consent, one-time adult credentials, and adult-controlled parent access.
 - Implemented in code: exact-origin checks for browser-facing login, upload, recovery, runner-session, coach-upload, and calendar mutations.
-- Implemented locally: nine automated security tests covering credential hashing, independent consent choices, request body bounds, CSV formula neutralization, upload MIME/signature rejection, image sanitization, and origin rejection.
+- Implemented locally and in CI: 21 automated security tests covering credential hashing/vault binding/session behavior, consent choices, privacy restrictions, request bounds, CSV formula neutralization, upload signatures/size/truncation/decompression bombs/sanitization, cross-team authorization, and origin rejection.
 - Engineering documentation completed: data/subprocessor inventory, draft retention/deletion schedule, incident-response runbook, security test matrix, and coordinated Gate A deployment checklist. Provider contracts, exact retention decisions, legal contacts, and live test evidence remain external actions.
 - Implemented in code: screenshot decoding and sanitizing now runs in a separately packaged worker thread with bounded V8 memory/stack settings, parent and Sharp deadlines, structured failure handling, and forced termination. The production build contains the emitted worker asset. A future external queue/process can provide stronger infrastructure-level isolation if upload volume requires it.
 - Implemented in code: strict per-request nonce Content Security Policy integrated with Clerk, restrictive object/base/frame rules, configured Supabase asset/connect origins, and production-only removal of `unsafe-eval`.
@@ -32,7 +32,7 @@ Last implementation review: August 24, 2026
 - Implemented in code, pending migration: authorized privacy-request intake for coaches, linked guardians and verified-email adult runners; bounded/rate-limited access, correction, export, restriction and deletion requests; and immutable request-event history.
 - Implemented in code, pending migration and staging verification: head-coach privacy processing queue, authorized no-store JSON exports, immutable status transitions, request-specific deletion confirmation, private screenshot removal, and transactional runner deletion that preserves pseudonymous completion evidence.
 - Implemented in code, pending migration and staging verification: end-of-season inventory snapshots, immediate runner credential/session revocation, archived-roster separation, optional approved retention dates, legal holds, audit-logged control changes, and retention-gated permanent cleanup with private-file removal.
-- Implemented in code, pending migration and production scheduling: metadata-only security events with pseudonymous actor references, authentication/origin/upload/authorization/export coverage, threshold-generated alerts, head-coach monitoring dashboard, audited alert acknowledgement/resolution, and audit coverage for team exports and calendar replacement.
+- Implemented, migrated, and scheduled daily within Vercel Hobby limits: metadata-only security events with pseudonymous actor references, authentication/origin/upload/authorization/export coverage, threshold-generated alerts, head-coach monitoring dashboard, audited alert acknowledgement/resolution, and audit coverage for team exports and calendar replacement.
 
 Deployment order for the completed code slices:
 

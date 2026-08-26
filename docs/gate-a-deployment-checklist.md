@@ -1,13 +1,13 @@
 # Gate A Coordinated Deployment Checklist
 
-Status: Prepared; do not execute until counsel-approved consent versions and staging tests are ready
+Status: Technical verification in progress with fake data in the production project; legal approval remains required before coach pilot
 
 ## Before maintenance window
 
 - [ ] Take and verify a Supabase backup/restore point.
-- [ ] Confirm a staging project has the same schema and storage configuration.
+- [x] Record the owner's decision to use only fake data in the production project until the coach pilot; no separate staging Supabase project will be created at this stage.
 - [ ] Generate independent high-entropy production secrets for `RUNNER_SESSION_SECRET` and `RUNNER_CREDENTIAL_REVEAL_SECRET`.
-- [ ] Generate `SECURITY_EVENT_HASH_SECRET` and `SECURITY_MONITOR_SECRET`; schedule `/api/maintenance/security-monitor` every 15 minutes with the monitor secret.
+- [x] Generate `SECURITY_EVENT_HASH_SECRET`; secure maintenance routes with `CRON_SECRET`; schedule the security monitor daily with a 1,440-minute lookback to match Vercel Hobby limits.
 - [ ] Configure counsel-approved `PARENT_CONSENT_VERSION` and `ADULT_CONSENT_VERSION`; draft values intentionally fail in production.
 - [ ] Confirm `NEXT_PUBLIC_APP_URL` is the canonical HTTPS origin so origin checks behave consistently.
 - [ ] Inventory existing runners with plaintext `access_code`, missing usernames, missing team IDs, and existing public screenshot URLs.
