@@ -14,6 +14,26 @@ test("upload processing rejects unsupported executable-like types", async () => 
   await assert.rejects(() => compressScreenshot(fake), /Only JPEG and PNG/);
 });
 
+test("upload processing rejects files over the byte limit before decoding", async () => {
+  const oversized = Buffer.alloc(8 * 1024 * 1024 + 1);
+  oversized.set([0xff, 0xd8, 0xff]);
+  const fake = new File([oversized], "oversized.jpg", { type: "image/jpeg" });
+  await assert.rejects(() => compressScreenshot(fake), /no larger than 8 MB/);
+});
+
+test("upload processing rejects truncated images inside the isolated worker", async () => {
+  const truncated = new File([Buffer.from([0xff, 0xd8, 0xff, 0xdb])], "truncated.jpg", { type: "image/jpeg" });
+  await assert.rejects(() => compressScreenshot(truncated), /could not be processed/);
+});
+
+test("upload processing rejects decompression-bomb dimensions", async () => {
+  const input = await sharp({
+    create: { width: 5001, height: 5001, channels: 3, background: "#ffffff" },
+  }).png({ compressionLevel: 9 }).toBuffer();
+  const bomb = new File([input], "oversized-dimensions.png", { type: "image/png" });
+  await assert.rejects(() => compressScreenshot(bomb), /dimensions are too large|could not be processed/);
+});
+
 test("upload processing strips input metadata and emits a bounded JPEG", async () => {
   const input = await sharp({
     create: { width: 20, height: 20, channels: 3, background: "#00a7ff" },
